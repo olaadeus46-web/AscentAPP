@@ -22,7 +22,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "A password deve ter pelo menos 8 caracteres." });
   }
 
-  if (findUserByEmail(email)) {
+  if (await findUserByEmail(email)) {
     return res.status(409).json({ error: "Já existe uma conta com esse email." });
   }
 

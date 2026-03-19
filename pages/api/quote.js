@@ -85,7 +85,7 @@ async function queryStooq(symbols) {
 }
 
 export default async function handler(req, res) {
-  const user = requireAuth(req, res);
+  const user = await requireAuth(req, res);
   if (!user) return;
 
   const { symbols } = req.query;

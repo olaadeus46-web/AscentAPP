@@ -9,7 +9,7 @@ const anthropic = new Anthropic({
 const newsapi = new NewsAPI(process.env.NEWSAPI_KEY);
 
 export default async function handler(req, res) {
-  const user = requireAuth(req, res);
+  const user = await requireAuth(req, res);
   if (!user) return;
 
   if (req.method !== 'POST') {

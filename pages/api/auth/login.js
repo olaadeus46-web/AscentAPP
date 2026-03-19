@@ -13,7 +13,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Email e password são obrigatórios." });
   }
 
-  const user = findUserByEmail(email);
+  const user = await findUserByEmail(email);
   if (!user) {
     return res.status(401).json({ error: "Credenciais inválidas." });
   }
