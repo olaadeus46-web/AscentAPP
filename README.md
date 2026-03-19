@@ -64,3 +64,15 @@ vercel
 ```
 
 Segue as instruções — a app fica online em 2 minutos.
+
+## Deploy na Netlify (variáveis obrigatórias)
+
+No painel da Netlify (Site settings > Environment variables), define:
+
+- `AUTH_SECRET` (ou `JWT_SECRET`) com um valor longo e aleatório
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `ANTHROPIC_API_KEY` (se usares chat/sugestões)
+- `NEWSAPI_KEY` (se usares notícias)
+
+Se faltar `AUTH_SECRET` em produção, o login/session vai falhar com erro de autenticação.
