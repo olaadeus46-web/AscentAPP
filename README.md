@@ -13,8 +13,8 @@ Cria um ficheiro `.env.local`:
 
 ```bash
 AUTH_SECRET=troca-isto-por-um-segredo-longo
-NEXT_PUBLIC_SUPABASE_URL=https://SEU-PROJETO.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_xxx
+SUPABASE_URL=https://SEU-PROJETO.supabase.co
+SUPABASE_ANON_KEY=sb_publishable_xxx
 # recomendado para produção (server-side, mais seguro)
 SUPABASE_SERVICE_ROLE_KEY=sb_service_role_xxx
 ANTHROPIC_API_KEY=...
@@ -70,8 +70,8 @@ Segue as instruções — a app fica online em 2 minutos.
 No painel da Netlify (Site settings > Environment variables), define:
 
 - `AUTH_SECRET` (ou `JWT_SECRET`) com um valor longo e aleatório
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY` (ou `SUPABASE_SERVICE_ROLE_KEY`)
 - `ANTHROPIC_API_KEY` (se usares chat/sugestões)
 - `NEWSAPI_KEY` (se usares notícias)
 
