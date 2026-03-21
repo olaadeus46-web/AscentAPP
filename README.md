@@ -37,6 +37,43 @@ npm run dev
 
 Abre o browser em **http://localhost:3000**
 
+## iOS (Capacitor) sem quebrar a versão web
+
+Esta app usa Next.js API routes, por isso no iPhone deve correr via URL web (local em desenvolvimento ou deploy em produção), dentro do wrapper nativo do Capacitor.
+
+### 1) Pré-requisitos
+
+- macOS com Xcode
+- iPhone ligado ao mesmo Wi-Fi da tua máquina (modo dev local)
+
+### 2) Variável da URL para o app iOS
+
+No terminal, define a URL que o WebView do iOS vai abrir:
+
+```bash
+# desenvolvimento (troca pelo IP local da tua máquina)
+$env:CAPACITOR_SERVER_URL="http://192.168.1.50:3000"
+
+# ou produção
+# $env:CAPACITOR_SERVER_URL="https://teu-site.netlify.app"
+```
+
+### 3) Criar/sincronizar iOS
+
+```bash
+npm run cap:add:ios
+npm run cap:sync:ios
+npm run cap:open:ios
+```
+
+Depois abre no Xcode e faz Run para o teu iPhone.
+
+### 4) Fluxo recomendado
+
+- Web normal continua igual: `npm run dev` / `npm run build`
+- iOS usa a mesma app web (não há fork de código)
+- Para testar local no iPhone, arranca `npm run dev` e usa `CAPACITOR_SERVER_URL` com o teu IP LAN
+
 ## Como funciona
 
 - A app corre localmente no teu computador

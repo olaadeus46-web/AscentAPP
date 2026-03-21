@@ -61,6 +61,11 @@ function startOfWeek(date) {
 function parseTime(t) { const [h, m] = (t || "00:00").split(":").map(Number); return h * 60 + (m || 0); }
 function minutesToTime(m) { return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; }
 function slotDuration(slot) { const s = parseTime(slot.startTime), e = parseTime(slot.endTime); return e > s ? e - s : 0; }
+function compactSlotTitle(title, maxLength = 0) {
+  const normalized = (title || "").trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength).trimEnd()}...`;
+}
 
 // ─── STYLES ──────────────────────────────────────────────────────────────────
 const card = (x = {}) => ({ background: S1, border: "1px solid " + BD, borderRadius: 12, padding: "20px 22px", ...x });
@@ -101,7 +106,7 @@ function SlotModal({ slot, defaultDate, onSave, onClose, onDelete, isMobile }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.8)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: S1, border: "1px solid " + BD2, borderRadius: 16, padding: isMobile ? "20px 16px 18px" : "28px 28px 24px", width: "100%", maxWidth: 500, maxHeight: "90vh", overflowY: "auto" }}>
+      <div style={{ background: S1, border: "1px solid " + BD2, borderRadius: 16, padding: isMobile ? "20px 16px 18px" : "28px 28px 24px", width: "100%", maxWidth: isMobile ? 420 : 680, maxHeight: "90vh", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
           <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 18, color: T }}>
             {slot?.id ? "Editar Slot" : "Novo Slot de Tempo"}
@@ -446,12 +451,12 @@ function MonthGrid({ year, month, slots, selectedDate, onSelectDate, isMobile })
 
           return (
             <div key={i} onClick={() => onSelectDate(isSel ? null : iso)}
-              style={{ minHeight: isMobile ? 54 : 72, padding: isMobile ? "6px 4px" : "8px 6px", borderRadius: 8, cursor: "pointer", transition: "all .15s", background: isSel ? G + "15" : isToday ? S2 : S1, border: "1px solid " + (isSel ? G + "50" : isToday ? BD2 : BD) }}
+              style={{ minHeight: isMobile ? 54 : 72, maxHeight: isMobile ? 54 : 72, padding: isMobile ? "6px 4px" : "8px 6px", borderRadius: 8, cursor: "pointer", transition: "all .15s", background: isSel ? G + "15" : isToday ? S2 : S1, border: "1px solid " + (isSel ? G + "50" : isToday ? BD2 : BD), display: "flex", flexDirection: "column" }}
               onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = S2; }}
               onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = isSel ? G + "15" : isToday ? S2 : S1; }}>
 
               {/* Day number */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
                 <span style={{ fontSize: isMobile ? 12 : 13, fontWeight: isToday ? 700 : 400, color: isSel ? G : isToday ? T : T2, lineHeight: 1 }}>
                   {day}
                 </span>
@@ -459,7 +464,7 @@ function MonthGrid({ year, month, slots, selectedDate, onSelectDate, isMobile })
               </div>
 
               {/* Slot pills */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: "100%", overflow: "hidden", flex: 1, minHeight: 0, minWidth: 0 }}>
                 {isMobile ? (
                   <div style={{ display: "flex", justifyContent: "center", gap: 2, minHeight: 6 }}>
                     {cats.map(catKey => {
@@ -467,16 +472,16 @@ function MonthGrid({ year, month, slots, selectedDate, onSelectDate, isMobile })
                       return <div key={catKey} style={{ width: 5, height: 5, borderRadius: "50%", background: cat?.color || T3 }} />;
                     })}
                   </div>
-                ) : daySlots.slice(0, 3).map(slot => {
+                ) : daySlots.slice(0, 1).map(slot => {
                   const cat = SLOT_CATEGORIES.find(c => c.key === slot.category);
                   return (
-                    <div key={slot.id} style={{ fontSize: 10, padding: "2px 5px", borderRadius: 4, background: cat?.color + "25", color: cat?.color, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textDecoration: slot.status === "done" ? "line-through" : "none" }}>
-                      {slot.startTime} {slot.title}
+                    <div key={slot.id} style={{ fontSize: 10, padding: "2px 5px", borderRadius: 4, background: cat?.color + "25", color: cat?.color, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0, textDecoration: slot.status === "done" ? "line-through" : "none" }}>
+                      {slot.startTime} {compactSlotTitle(slot.title)}
                     </div>
                   );
                 })}
-                {!isMobile && daySlots.length > 3 && (
-                  <div style={{ fontSize: 10, color: T3, paddingLeft: 5 }}>+{daySlots.length - 3} mais</div>
+                {!isMobile && daySlots.length > 1 && (
+                  <div style={{ fontSize: 10, color: T3, paddingLeft: 5 }}>+{daySlots.length - 1} mais</div>
                 )}
               </div>
             </div>

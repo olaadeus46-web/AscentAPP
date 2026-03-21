@@ -861,7 +861,7 @@ function Patrimonio({ portfolios, savePortfolios, prices, setPrices, fx, setFx, 
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 12, marginBottom: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12, marginBottom: 20 }}>
         {[
           { label: "Patrimônio Total", val: baseCurrency+" "+fmtF(total), sub: ((total/toBaseCurrency(TARGET, baseCurrency, fx))*100).toFixed(2)+"% do objetivo", color: G },
           { label: "Total Investido",  val: baseCurrency+" "+fmtF(totalCost), sub: "custo de aquisição" },
@@ -980,7 +980,7 @@ function Dashboard({ portfolios, prices, fx, nwHistory, ideas, goals, startDate,
         </div>}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12, marginBottom: 20 }}>
         {[
           { label: "Dias na jornada", val: days, sub: startDate ? "desde "+fmtD(startDate) : "início" },
           { label: "Fontes ativas",   val: ideas.filter(i => i.status === "active").length, sub: "rendimento" },
@@ -1244,7 +1244,7 @@ function Objetivos({ goals, saveGoals, onAddCalendarTask }) {
       }
       {show && (
         <Modal title={edit ? "Editar Objetivo" : "Novo Objetivo"} onClose={() => { setShow(false); setEdit(null); }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}> 
             <div><span style={lbl}>Título *</span><input style={inp} value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="ex: Fundo de emergência 20.000 CHF" /></div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div><span style={lbl}>Categoria</span><select style={inp} value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>{CATS.map(c => <option key={c}>{c}</option>)}</select></div>
@@ -1316,6 +1316,7 @@ function Chatbot({ portfolios, prices, fx, goals, ideas, nwHistory, startDate, b
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  const [isCompact, setIsCompact] = useState(false);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -1323,6 +1324,13 @@ function Chatbot({ portfolios, prices, fx, goals, ideas, nwHistory, startDate, b
   };
 
   useEffect(scrollToBottom, [messages]);
+
+  useEffect(() => {
+    const onResize = () => setIsCompact(window.innerWidth <= 640);
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const sendMessage = async () => {
     if (!input.trim() || loading) return;
@@ -1400,8 +1408,8 @@ function Chatbot({ portfolios, prices, fx, goals, ideas, nwHistory, startDate, b
           onClick={() => setOpen(true)}
           style={{
             position: "fixed",
-            right: 18,
-            bottom: 18,
+            right: isCompact ? 12 : 18,
+            bottom: isCompact ? "calc(env(safe-area-inset-bottom, 0px) + 12px)" : 18,
             zIndex: 90,
             ...btnG,
             padding: "10px 14px",
@@ -1415,11 +1423,12 @@ function Chatbot({ portfolios, prices, fx, goals, ideas, nwHistory, startDate, b
       {open && (
         <div style={{
           position: "fixed",
-          right: 18,
-          bottom: 18,
+          right: isCompact ? 10 : 18,
+          bottom: isCompact ? "calc(env(safe-area-inset-bottom, 0px) + 10px)" : 18,
           zIndex: 90,
-          width: 350,
-          height: 470,
+          width: isCompact ? "calc(100vw - 20px)" : 350,
+          height: isCompact ? "min(70vh, 560px)" : 470,
+          maxWidth: 380,
           display: "flex",
           flexDirection: "column",
           background: S1,
@@ -1483,7 +1492,27 @@ function Chatbot({ portfolios, prices, fx, goals, ideas, nwHistory, startDate, b
   );
 }
 
-function AuthScreen({ hasUsers, onAuthenticated }) {
+function HomeScreen({ hasUsers, onAuthenticated }) {
+  const highlights = [
+    {
+      title: "Patrimônio num só painel",
+      text: "Concentra contas, investimentos e evolução do teu capital num espaço simples de acompanhar.",
+    },
+    {
+      title: "Tempo com intenção",
+      text: "Organiza blocos no calendário para transformar objetivos financeiros em ações consistentes.",
+    },
+    {
+      title: "Rendimento em construção",
+      text: "Explora ideias, acompanha progresso e desenvolve novas fontes de rendimento com clareza.",
+    },
+  ];
+
+  const sections = [
+    "Visão global do patrimônio e da rota até ao teu objetivo.",
+    "Planeamento semanal com foco no que realmente move resultados.",
+    "Gestão de ideias, metas e próximos passos no mesmo fluxo.",
+  ];
   const [mode, setMode] = useState(hasUsers ? "login" : "register");
   const [form, setForm] = useState({ name: "", email: "", password: "", confirmPassword: "" });
   const [submitting, setSubmitting] = useState(false);
@@ -1535,117 +1564,142 @@ function AuthScreen({ hasUsers, onAuthenticated }) {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: `radial-gradient(circle at top, ${S2} 0%, ${BG} 55%)`, color: T, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <div style={{ width: "100%", maxWidth: 980, display: "grid", gridTemplateColumns: "1.05fr .95fr", gap: 24, alignItems: "stretch" }}>
-        <div style={{ ...card({ padding: "34px 34px 30px", background: `linear-gradient(180deg, ${S1}, ${BG})`, display: "flex", flexDirection: "column", justifyContent: "space-between" }) }}>
-          <div>
-            <p style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 1.4, color: G, fontWeight: 700, marginBottom: 14 }}>SQLite Local</p>
-            <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: 42, lineHeight: 1.05, marginBottom: 14 }}>Rota ao Milhão</h1>
-            <p style={{ color: T2, fontSize: 15, lineHeight: 1.7, maxWidth: 430 }}>
-              A app passa agora a ter autenticação local com base de dados SQLite. O acesso ao dashboard fica protegido por sessão com cookie seguro no browser.
-            </p>
-          </div>
+    <div style={{ minHeight: "100vh", background: `radial-gradient(circle at top left, ${S2} 0%, ${BG} 58%)`, color: T, padding: "48px 24px 56px" }}>
+      <div style={{ maxWidth: 1040, margin: "0 auto" }}>
+        <div style={{ ...card({
+          padding: "40px 36px",
+          background: `linear-gradient(140deg, ${S1} 0%, ${S2} 55%, ${BG} 100%)`,
+          marginBottom: 22,
+          overflow: "hidden",
+          position: "relative",
+          border: "none",
+          boxShadow: "0 28px 70px rgba(0,0,0,.22)",
+        }) }}>
+          <div style={{ position: "absolute", top: -80, right: -60, width: 260, height: 260, borderRadius: "50%", background: `${G}14`, filter: "blur(6px)" }} />
+          <div style={{ position: "relative", display: "grid", gridTemplateColumns: "minmax(0,1.15fr) minmax(300px,.85fr)", gap: 24, alignItems: "stretch" }}>
+            <div>
+              <p style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 1.8, color: G, fontWeight: 700, marginBottom: 16 }}>Rota ao Milhão</p>
+              <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(40px, 8vw, 64px)", lineHeight: 1.02, marginBottom: 18, maxWidth: 680 }}>
+                Acompanha o teu patrimônio, planeia o teu tempo, desenvolve as tuas fontes de rendimento.
+              </h1>
+              <p style={{ fontSize: 18, lineHeight: 1.7, color: T2, maxWidth: 640 }}>
+                Tudo num só lugar.
+              </p>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 12, marginTop: 28 }}>
-            {[
-              { title: "BD local", text: "Ficheiro SQLite criado localmente em data/app.db." },
-              { title: "Sessão", text: "Login persistido com cookie httpOnly." },
-              { title: "Arranque", text: hasUsers ? "Entra com a tua conta para abrir a app." : "Cria a primeira conta para inicializar a app." },
-            ].map(item => (
-              <div key={item.title} style={{ background: S2, border: "1px solid " + BD, borderRadius: 12, padding: "14px 14px 12px" }}>
-                <p style={{ fontSize: 13, color: T, fontWeight: 600, marginBottom: 6 }}>{item.title}</p>
-                <p style={{ fontSize: 12, color: T3, lineHeight: 1.6 }}>{item.text}</p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 28, maxWidth: 560 }}>
+                {sections.map((text, index) => (
+                  <div key={text} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                    <span style={{ width: 28, height: 28, borderRadius: "50%", background: `${G}16`, color: G, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
+                      0{index + 1}
+                    </span>
+                    <p style={{ color: T2, fontSize: 14, lineHeight: 1.7 }}>{text}</p>
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
+
+            <div style={{ background: "rgba(10,10,14,0.72)", borderRadius: 22, padding: "24px 22px", boxShadow: "0 24px 50px rgba(0,0,0,.18)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+                <div>
+                  <p style={{ fontFamily: "'Playfair Display',serif", fontSize: 28, color: T }}>{isRegister ? "Criar conta" : "Entrar"}</p>
+                  <p style={{ color: T3, fontSize: 13, marginTop: 5 }}>
+                    {isRegister ? "Cria acesso para abrir o teu dashboard." : "Entra para retomar a tua rota."}
+                  </p>
+                </div>
+                <div style={{ display: "flex", gap: 4, background: "rgba(0,0,0,.18)", borderRadius: 12, padding: 4 }}>
+                  {["login", "register"].map(tab => (
+                    <button
+                      key={tab}
+                      onClick={() => { setMode(tab); setError(""); }}
+                      style={{
+                        ...bsm({ border: "none", padding: "8px 14px", borderRadius: 10 }),
+                        background: mode === tab ? G : "transparent",
+                        color: mode === tab ? "#1a1205" : T2,
+                        fontWeight: mode === tab ? 700 : 500,
+                      }}>
+                      {tab === "login" ? "Login" : "Registar"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {isRegister && (
+                  <div>
+                    <span style={lbl}>Nome</span>
+                    <input
+                      style={{ ...inp, border: "none", background: "rgba(255,255,255,.05)" }}
+                      value={form.name}
+                      onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder="O teu nome"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <span style={lbl}>Email</span>
+                  <input
+                    style={{ ...inp, border: "none", background: "rgba(255,255,255,.05)" }}
+                    type="email"
+                    autoComplete="email"
+                    value={form.email}
+                    onChange={e => setForm(prev => ({ ...prev, email: e.target.value }))}
+                    placeholder="tu@exemplo.com"
+                  />
+                </div>
+
+                <div>
+                  <span style={lbl}>Password</span>
+                  <input
+                    style={{ ...inp, border: "none", background: "rgba(255,255,255,.05)" }}
+                    type="password"
+                    autoComplete={isRegister ? "new-password" : "current-password"}
+                    value={form.password}
+                    onChange={e => setForm(prev => ({ ...prev, password: e.target.value }))}
+                    placeholder="Mínimo 8 caracteres"
+                  />
+                </div>
+
+                {isRegister && (
+                  <div>
+                    <span style={lbl}>Confirmar password</span>
+                    <input
+                      style={{ ...inp, border: "none", background: "rgba(255,255,255,.05)" }}
+                      type="password"
+                      autoComplete="new-password"
+                      value={form.confirmPassword}
+                      onChange={e => setForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                      placeholder="Repete a password"
+                    />
+                  </div>
+                )}
+
+                {error && (
+                  <div style={{ background: RD + "14", color: RD, borderRadius: 10, padding: "10px 12px", fontSize: 13 }}>
+                    {error}
+                  </div>
+                )}
+
+                <button type="submit" style={{ ...btnG, width: "100%", justifyContent: "center", marginTop: 4, opacity: submitting ? 0.75 : 1, border: "none" }} disabled={submitting}>
+                  {submitting ? "A processar..." : isRegister ? "Criar conta e entrar" : "Entrar"}
+                </button>
+              </form>
+
+              <p style={{ fontSize: 12, color: T3, lineHeight: 1.6, marginTop: 14 }}>
+                {hasUsers ? "Já existe uma conta? Faz login para continuar." : "Ainda não existe nenhuma conta. Cria a primeira para começar."}
+              </p>
+            </div>
           </div>
         </div>
 
-        <div style={{ ...card({ padding: "30px 28px", alignSelf: "center" }) }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
-            <div>
-              <p style={{ fontFamily: "'Playfair Display',serif", fontSize: 28, color: T }}>{isRegister ? "Criar conta" : "Entrar"}</p>
-              <p style={{ color: T3, fontSize: 13, marginTop: 5 }}>
-                {isRegister ? "A conta fica guardada na tua base de dados local." : "Autentica-te para abrir o teu dashboard."}
-              </p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 16 }}>
+          {highlights.map((item, index) => (
+            <div key={item.title} style={{ ...card({ padding: "22px 20px", background: index === 1 ? `linear-gradient(180deg, ${S2}, ${S1})` : S1, border: "none", boxShadow: "0 18px 40px rgba(0,0,0,.16)" }) }}>
+              <p style={{ fontSize: 12, color: G, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 10 }}>0{index + 1}</p>
+              <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 24, lineHeight: 1.15, marginBottom: 10, color: T }}>{item.title}</h2>
+              <p style={{ fontSize: 14, lineHeight: 1.7, color: T2 }}>{item.text}</p>
             </div>
-            <div style={{ display: "flex", gap: 4, border: "1px solid " + BD2, borderRadius: 10, padding: 3 }}>
-              {["login", "register"].map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => { setMode(tab); setError(""); }}
-                  style={{
-                    ...bsm({ border: "none", padding: "8px 14px", borderRadius: 8 }),
-                    background: mode === tab ? G : "transparent",
-                    color: mode === tab ? "#1a1205" : T2,
-                    fontWeight: mode === tab ? 700 : 500,
-                  }}>
-                  {tab === "login" ? "Login" : "Registar"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {isRegister && (
-              <div>
-                <span style={lbl}>Nome</span>
-                <input
-                  style={inp}
-                  value={form.name}
-                  onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="O teu nome"
-                />
-              </div>
-            )}
-
-            <div>
-              <span style={lbl}>Email</span>
-              <input
-                style={inp}
-                type="email"
-                autoComplete="email"
-                value={form.email}
-                onChange={e => setForm(prev => ({ ...prev, email: e.target.value }))}
-                placeholder="tu@exemplo.com"
-              />
-            </div>
-
-            <div>
-              <span style={lbl}>Password</span>
-              <input
-                style={inp}
-                type="password"
-                autoComplete={isRegister ? "new-password" : "current-password"}
-                value={form.password}
-                onChange={e => setForm(prev => ({ ...prev, password: e.target.value }))}
-                placeholder="Mínimo 8 caracteres"
-              />
-            </div>
-
-            {isRegister && (
-              <div>
-                <span style={lbl}>Confirmar password</span>
-                <input
-                  style={inp}
-                  type="password"
-                  autoComplete="new-password"
-                  value={form.confirmPassword}
-                  onChange={e => setForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                  placeholder="Repete a password"
-                />
-              </div>
-            )}
-
-            {error && (
-              <div style={{ background: RD + "14", border: "1px solid " + RD + "35", color: RD, borderRadius: 10, padding: "10px 12px", fontSize: 13 }}>
-                {error}
-              </div>
-            )}
-
-            <button type="submit" style={{ ...btnG, width: "100%", justifyContent: "center", marginTop: 4, opacity: submitting ? 0.75 : 1 }} disabled={submitting}>
-              {submitting ? "A processar..." : isRegister ? "Criar conta e entrar" : "Entrar"}
-            </button>
-          </form>
+          ))}
         </div>
       </div>
     </div>
@@ -1846,14 +1900,15 @@ export default function App() {
   return (
     <>
       <Head>
-        <title>Ascent</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Rota ao Milhão</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <meta name="description" content="Acompanha o teu patrimônio, planeia o teu tempo e desenvolve as tuas fontes de rendimento. Tudo num só lugar." />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&family=Playfair+Display:wght@400;600&display=swap" rel="stylesheet" />
       </Head>
 
       {!user ? (
-        <AuthScreen
+        <HomeScreen
           hasUsers={hasUsers}
           onAuthenticated={(nextUser) => {
             setUser(nextUser);
@@ -1862,12 +1917,12 @@ export default function App() {
           }}
         />
       ) : (
-      <div style={{ fontFamily: "'Outfit',sans-serif", background: BG, minHeight: "100vh", color: T }}>
-        <style>{`*{box-sizing:border-box;margin:0;padding:0;}body{background:${BG};}input[type=number]::-webkit-inner-spin-button{opacity:.3;}select option{background:${S2};color:${T};}`}</style>
+      <div style={{ fontFamily: "'Outfit',sans-serif", background: BG, minHeight: "100vh", color: T, paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+        <style>{`*{box-sizing:border-box;margin:0;padding:0;}html,body{min-height:100%;background:${BG};}body{padding:0;margin:0;}input[type=number]::-webkit-inner-spin-button{opacity:.3;}select option{background:${S2};color:${T};}button{-webkit-tap-highlight-color:transparent;}@media (max-width: 900px){input,select,textarea{font-size:16px !important;}}`}</style>
 
         {/* Header */}
         <div style={{ background: S1+"ee", backdropFilter: "blur(12px)", borderBottom: "1px solid "+BD, position: "sticky", top: 0, zIndex: 50 }}>
-          <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "10px 24px" : "0 24px", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 58, gap: 12, flexWrap: isMobile ? "wrap" : "nowrap" }}>
+          <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "10px 14px" : "0 24px", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 58, gap: 12, flexWrap: isMobile ? "wrap" : "nowrap" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ width: 8, height: 8, borderRadius: "50%", background: G }} />
               <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 16, color: T }}>ASCENT</span>
@@ -1913,7 +1968,7 @@ export default function App() {
         </div>
 
         {/* Content */}
-        <div style={{ maxWidth: 900, margin: "0 auto", padding: "28px 24px" }}>
+        <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "18px 14px 26px" : "28px 24px" }}>
           {section === "patrimonio" && <Patrimonio portfolios={portfolios} savePortfolios={savePortfolios} prices={prices} setPrices={setPrices} fx={fx} setFx={setFx} nwHistory={nwHistory} saveNwHistory={saveNwHistory} baseCurrency={baseCurrency} onUpdateBaseCurrency={updateBaseCurrency} />}
           {section === "ideias"     && <Ideias ideas={ideas} saveIdeas={saveIdeas} />}
           {section === "objetivos"  && <Objetivos goals={goals} saveGoals={saveGoals} onAddCalendarTask={addGoalSuggestionToCalendar} />}

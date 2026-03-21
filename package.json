@@ -5,10 +5,16 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "cap:add:ios": "npx cap add ios",
+    "cap:sync": "npx cap sync",
+    "cap:sync:ios": "npx cap sync ios",
+    "cap:open:ios": "npx cap open ios"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
+    "@capacitor/core": "^8.2.0",
+    "@capacitor/ios": "^8.2.0",
     "@supabase/supabase-js": "^2.99.2",
     "bcryptjs": "^3.0.3",
     "cookie": "^1.1.1",
@@ -20,5 +26,9 @@
     "react-markdown": "^10.1.0",
     "recharts": "^2.12.7",
     "yahoo-finance2": "^2.11.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.2.0",
+    "typescript": "^5.9.3"
   }
 }
