@@ -7,21 +7,22 @@
 import { useState, useEffect } from "react";
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
-const G   = "#c9a84c";
-const GL  = "#e8c96a";
-const BG  = "#0d0d10";
-const S1  = "#141418";
-const S2  = "#1c1c22";
-const S3  = "#26262e";
-const BD  = "rgba(255,255,255,0.07)";
-const BD2 = "rgba(255,255,255,0.13)";
-const T   = "#eeeeea";
-const T2  = "#88888f";
-const T3  = "#555560";
-const GR  = "#4db87a";
-const RD  = "#e05555";
-const BL  = "#5599dd";
-const PU  = "#aa77dd";
+const G   = "#f5c970";
+const GL  = "#ffe39e";
+const BG  = "#07090f";
+const S1  = "#101423";
+const S2  = "#171d31";
+const S3  = "#222a43";
+const BD  = "rgba(180,196,255,0.12)";
+const BD2 = "rgba(210,223,255,0.22)";
+const T   = "#f8faff";
+const T2  = "#b0bddf";
+const T3  = "#7a86a8";
+const GR  = "#39d08f";
+const RD  = "#ff6d7f";
+const BL  = "#67b4ff";
+const PU  = "#b38cff";
+const APP_FONT = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Outfit', sans-serif";
 
 const SLOT_CATEGORIES = [
   { key: "work",     label: "Trabalho",   color: BL   },
@@ -68,11 +69,11 @@ function compactSlotTitle(title, maxLength = 0) {
 }
 
 // ─── STYLES ──────────────────────────────────────────────────────────────────
-const card = (x = {}) => ({ background: S1, border: "1px solid " + BD, borderRadius: 12, padding: "20px 22px", ...x });
-const btn  = (x = {}) => ({ padding: "10px 20px", borderRadius: 8, border: "1px solid " + BD2, background: "transparent", color: T, fontFamily: "'Outfit',sans-serif", fontSize: 14, cursor: "pointer", fontWeight: 500, transition: "all .15s", ...x });
-const btnG = { ...btn(), background: G, border: "1px solid " + GL, color: "#1a1205" };
+const card = (x = {}) => ({ background: "linear-gradient(165deg, rgba(255,255,255,.035), rgba(255,255,255,.01))", border: "1px solid " + BD, borderRadius: 18, padding: "20px 22px", boxShadow: "0 14px 36px rgba(4,8,20,.42)", backdropFilter: "blur(12px)", ...x });
+const btn  = (x = {}) => ({ padding: "10px 20px", borderRadius: 12, border: "1px solid " + BD2, background: "rgba(255,255,255,.03)", color: T, fontFamily: APP_FONT, fontSize: 14, cursor: "pointer", fontWeight: 500, transition: "all .18s", ...x });
+const btnG = { ...btn(), background: "linear-gradient(135deg, #f5c970 0%, #f0b44e 100%)", border: "1px solid " + GL, color: "#1d1407", boxShadow: "0 10px 24px rgba(245,201,112,.25)" };
 const bsm  = (x = {}) => btn({ padding: "6px 12px", fontSize: 12, ...x });
-const inp  = { background: S2, border: "1px solid " + BD2, borderRadius: 8, padding: "10px 14px", color: T, fontFamily: "'Outfit',sans-serif", fontSize: 14, width: "100%", outline: "none", boxSizing: "border-box" };
+const inp  = { background: "rgba(255,255,255,.04)", border: "1px solid " + BD2, borderRadius: 12, padding: "11px 14px", color: T, fontFamily: APP_FONT, fontSize: 14, width: "100%", outline: "none", boxSizing: "border-box" };
 const lbl  = { fontSize: 12, color: T2, fontWeight: 500, marginBottom: 6, display: "block" };
 
 // ─── SLOT FORM MODAL ─────────────────────────────────────────────────────────

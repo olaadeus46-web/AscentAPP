@@ -6,21 +6,22 @@ import CalendarView from "../components/CalendarView";
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
 const TARGET = 1_000_000;
-const G  = "#c9a84c";
-const GL = "#e8c96a";
-const BG = "#0d0d10";
-const S1 = "#141418";
-const S2 = "#1c1c22";
-const S3 = "#26262e";
-const BD  = "rgba(255,255,255,0.07)";
-const BD2 = "rgba(255,255,255,0.13)";
-const T   = "#eeeeea";
-const T2  = "#88888f";
-const T3  = "#555560";
-const GR  = "#4db87a";
-const RD  = "#e05555";
-const BL  = "#5599dd";
-const PU  = "#aa77dd";
+const G  = "#f5c970";
+const GL = "#ffe39e";
+const BG = "#07090f";
+const S1 = "#101423";
+const S2 = "#171d31";
+const S3 = "#222a43";
+const BD  = "rgba(180,196,255,0.12)";
+const BD2 = "rgba(210,223,255,0.22)";
+const T   = "#f8faff";
+const T2  = "#b0bddf";
+const T3  = "#7a86a8";
+const GR  = "#39d08f";
+const RD  = "#ff6d7f";
+const BL  = "#67b4ff";
+const PU  = "#b38cff";
+const APP_FONT = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Outfit', sans-serif";
 
 const MILESTONES = [
   { amount: 10_000,   label: "Primeiro Marco" },
@@ -52,7 +53,7 @@ const ASSET_TYPES = [
 ];
 
 const CURRENCIES = ["CHF", "EUR", "USD", "GBP", "BTC", "ETH"];
-const PALETTE    = ["#c9a84c","#5599dd","#4db87a","#aa77dd","#e08855","#55bbdd","#dd5577"];
+const PALETTE    = ["#f5c970","#67b4ff","#39d08f","#b38cff","#ff9f68","#5fd2e6","#ff6d9c"];
 
 const IDEA_STATUSES = [
   { key: "idea",      label: "Ideia",      color: BL },
@@ -240,11 +241,31 @@ function guessCurrency(symbol) {
 }
 
 // ─── STYLES ──────────────────────────────────────────────────────────────────
-const card = (x = {}) => ({ background: S1, border: "1px solid "+BD, borderRadius: 12, padding: "20px 22px", ...x });
-const btn  = (x = {}) => ({ padding: "10px 20px", borderRadius: 8, border: "1px solid "+BD2, background: "transparent", color: T, fontFamily: "'Outfit',sans-serif", fontSize: 14, cursor: "pointer", fontWeight: 500, transition: "all .15s", ...x });
-const btnG = { ...btn(), background: G, border: "1px solid "+GL, color: "#1a1205" };
+const card = (x = {}) => ({
+  background: "linear-gradient(165deg, rgba(255,255,255,.035), rgba(255,255,255,.01))",
+  border: "1px solid "+BD,
+  borderRadius: 18,
+  padding: "20px 22px",
+  boxShadow: "0 14px 36px rgba(4,8,20,.42)",
+  backdropFilter: "blur(12px)",
+  ...x,
+});
+const btn  = (x = {}) => ({
+  padding: "10px 20px",
+  borderRadius: 12,
+  border: "1px solid "+BD2,
+  background: "rgba(255,255,255,.03)",
+  color: T,
+  fontFamily: APP_FONT,
+  fontSize: 14,
+  cursor: "pointer",
+  fontWeight: 500,
+  transition: "all .18s ease",
+  ...x,
+});
+const btnG = { ...btn(), background: "linear-gradient(135deg, #f5c970 0%, #f0b44e 100%)", border: "1px solid "+GL, color: "#1d1407", boxShadow: "0 10px 24px rgba(245,201,112,.25)" };
 const bsm  = (x = {}) => btn({ padding: "6px 12px", fontSize: 12, ...x });
-const inp  = { background: S2, border: "1px solid "+BD2, borderRadius: 8, padding: "10px 14px", color: T, fontFamily: "'Outfit',sans-serif", fontSize: 14, width: "100%", outline: "none", boxSizing: "border-box" };
+const inp  = { background: "rgba(255,255,255,.04)", border: "1px solid "+BD2, borderRadius: 12, padding: "11px 14px", color: T, fontFamily: APP_FONT, fontSize: 14, width: "100%", outline: "none", boxSizing: "border-box" };
 const lbl  = { fontSize: 12, color: T2, fontWeight: 500, marginBottom: 6, display: "block" };
 
 // ─── SHARED UI ───────────────────────────────────────────────────────────────
@@ -1564,22 +1585,22 @@ function HomeScreen({ hasUsers, onAuthenticated }) {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: `radial-gradient(circle at top left, ${S2} 0%, ${BG} 58%)`, color: T, padding: "48px 24px 56px" }}>
+    <div style={{ minHeight: "100dvh", background: `radial-gradient(circle at 15% -10%, #25335a 0%, ${S2} 32%, ${BG} 75%)`, color: T, padding: "max(24px, env(safe-area-inset-top, 0px)) 18px max(28px, env(safe-area-inset-bottom, 0px))" }}>
       <div style={{ maxWidth: 1040, margin: "0 auto" }}>
         <div style={{ ...card({
-          padding: "40px 36px",
-          background: `linear-gradient(140deg, ${S1} 0%, ${S2} 55%, ${BG} 100%)`,
+          padding: "34px 28px",
+          background: `linear-gradient(145deg, rgba(255,255,255,.06) 0%, ${S1} 45%, ${S2} 100%)`,
           marginBottom: 22,
           overflow: "hidden",
           position: "relative",
-          border: "none",
-          boxShadow: "0 28px 70px rgba(0,0,0,.22)",
+          border: "1px solid rgba(216,229,255,.18)",
+          boxShadow: "0 30px 70px rgba(6,10,24,.45)",
         }) }}>
-          <div style={{ position: "absolute", top: -80, right: -60, width: 260, height: 260, borderRadius: "50%", background: `${G}14`, filter: "blur(6px)" }} />
+          <div style={{ position: "absolute", top: -80, right: -60, width: 260, height: 260, borderRadius: "50%", background: `${BL}22`, filter: "blur(10px)" }} />
           <div style={{ position: "relative", display: "grid", gridTemplateColumns: "minmax(0,1.15fr) minmax(300px,.85fr)", gap: 24, alignItems: "stretch" }}>
             <div>
               <p style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 1.8, color: G, fontWeight: 700, marginBottom: 16 }}>Rota ao Milhão</p>
-              <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: "clamp(40px, 8vw, 64px)", lineHeight: 1.02, marginBottom: 18, maxWidth: 680 }}>
+              <h1 style={{ fontFamily: APP_FONT, fontWeight: 700, fontSize: "clamp(30px, 8vw, 58px)", lineHeight: 1.04, marginBottom: 18, maxWidth: 680 }}>
                 Acompanha o teu patrimônio, planeia o teu tempo, desenvolve as tuas fontes de rendimento.
               </h1>
               <p style={{ fontSize: 18, lineHeight: 1.7, color: T2, maxWidth: 640 }}>
@@ -1598,10 +1619,10 @@ function HomeScreen({ hasUsers, onAuthenticated }) {
               </div>
             </div>
 
-            <div style={{ background: "rgba(10,10,14,0.72)", borderRadius: 22, padding: "24px 22px", boxShadow: "0 24px 50px rgba(0,0,0,.18)" }}>
+            <div style={{ background: "rgba(8,12,24,0.75)", borderRadius: 22, padding: "24px 22px", boxShadow: "0 24px 50px rgba(0,0,0,.26)", border: "1px solid rgba(210,223,255,.16)" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
                 <div>
-                  <p style={{ fontFamily: "'Playfair Display',serif", fontSize: 28, color: T }}>{isRegister ? "Criar conta" : "Entrar"}</p>
+                  <p style={{ fontFamily: APP_FONT, fontWeight: 700, fontSize: 30, color: T }}>{isRegister ? "Criar conta" : "Entrar"}</p>
                   <p style={{ color: T3, fontSize: 13, marginTop: 5 }}>
                     {isRegister ? "Cria acesso para abrir o teu dashboard." : "Entra para retomar a tua rota."}
                   </p>
@@ -1892,7 +1913,7 @@ export default function App() {
   }, [applyUserData]);
 
   if (!loaded) return (
-    <div style={{ fontFamily: "'Outfit',sans-serif", background: BG, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: T2 }}>
+    <div style={{ fontFamily: APP_FONT, background: BG, minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", color: T2 }}>
       <p>A carregar...</p>
     </div>
   );
@@ -1917,33 +1938,20 @@ export default function App() {
           }}
         />
       ) : (
-      <div style={{ fontFamily: "'Outfit',sans-serif", background: BG, minHeight: "100vh", color: T, paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
-        <style>{`*{box-sizing:border-box;margin:0;padding:0;}html,body{min-height:100%;background:${BG};}body{padding:0;margin:0;}input[type=number]::-webkit-inner-spin-button{opacity:.3;}select option{background:${S2};color:${T};}button{-webkit-tap-highlight-color:transparent;}@media (max-width: 900px){input,select,textarea{font-size:16px !important;}}`}</style>
+      <div style={{ fontFamily: APP_FONT, background: `radial-gradient(circle at 18% -12%, #25335a 0%, ${S2} 34%, ${BG} 78%)`, minHeight: "100dvh", color: T, paddingBottom: isMobile ? "calc(68px + env(safe-area-inset-bottom, 0px))" : "env(safe-area-inset-bottom, 0px)" }}>
+        <style>{`*{box-sizing:border-box;margin:0;padding:0;}html,body{min-height:100%;background:${BG};}body{padding:0;margin:0;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}input[type=number]::-webkit-inner-spin-button{opacity:.3;}select option{background:${S2};color:${T};}button{-webkit-tap-highlight-color:transparent;}*{scrollbar-width:thin;scrollbar-color:${BD2} transparent;}::-webkit-scrollbar{height:8px;width:8px;}::-webkit-scrollbar-thumb{background:${BD2};border-radius:99px;}@media (max-width: 900px){input,select,textarea{font-size:16px !important;}}`}</style>
 
         {/* Header */}
-        <div style={{ background: S1+"ee", backdropFilter: "blur(12px)", borderBottom: "1px solid "+BD, position: "sticky", top: 0, zIndex: 50 }}>
+        <div style={{ background: "rgba(12,17,32,.72)", backdropFilter: "blur(16px)", borderBottom: "1px solid "+BD, position: "sticky", top: 0, zIndex: 50 }}>
           <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "10px 14px" : "0 24px", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 58, gap: 12, flexWrap: isMobile ? "wrap" : "nowrap" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ width: 8, height: 8, borderRadius: "50%", background: G }} />
-              <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 16, color: T }}>ASCENT</span>
+              <span style={{ fontFamily: APP_FONT, fontWeight: 700, letterSpacing: .3, fontSize: 16, color: T }}>ASCENT</span>
             </div>
             {isMobile ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto", width: "100%" }}>
-                <span style={{ fontSize: 12, color: T2 }}>{user.name}</span>
-                <select
-                  value={section}
-                  onChange={async e => {
-                    const next = e.target.value;
-                    if (next === "__logout") {
-                      await logout();
-                      return;
-                    }
-                    setSection(next);
-                  }}
-                  style={{ ...inp, marginLeft: "auto", width: "auto", minWidth: 170, padding: "6px 10px", fontSize: 12, background: S2, border: "1px solid " + BD2 }}>
-                  {NAV.map(n => <option key={n.key} value={n.key}>{n.label}</option>)}
-                  <option value="__logout">Sair</option>
-                </select>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto", width: "100%", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 12, color: T2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "65%" }}>{user.name}</span>
+                <button style={bsm({ padding: "6px 12px", borderRadius: 999 })} onClick={logout}>Sair</button>
               </div>
             ) : (
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
@@ -1968,12 +1976,24 @@ export default function App() {
         </div>
 
         {/* Content */}
-        <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "18px 14px 26px" : "28px 24px" }}>
+        <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "16px 14px 20px" : "28px 24px" }}>
           {section === "patrimonio" && <Patrimonio portfolios={portfolios} savePortfolios={savePortfolios} prices={prices} setPrices={setPrices} fx={fx} setFx={setFx} nwHistory={nwHistory} saveNwHistory={saveNwHistory} baseCurrency={baseCurrency} onUpdateBaseCurrency={updateBaseCurrency} />}
           {section === "ideias"     && <Ideias ideas={ideas} saveIdeas={saveIdeas} />}
           {section === "objetivos"  && <Objetivos goals={goals} saveGoals={saveGoals} onAddCalendarTask={addGoalSuggestionToCalendar} />}
           {section === "calendario" && <CalendarView slots={calendarSlots} onSaveSlots={saveCalendarSlots} newSlotPrefill={calendarSlotPrefill} onConsumeNewSlotPrefill={consumeCalendarSlotPrefill} />}
         </div>
+
+        {isMobile && (
+          <div style={{ position: "fixed", left: 10, right: 10, bottom: "calc(8px + env(safe-area-inset-bottom, 0px))", zIndex: 70, background: "rgba(12,17,32,.82)", border: "1px solid "+BD, borderRadius: 18, backdropFilter: "blur(14px)", boxShadow: "0 16px 34px rgba(4,8,22,.45)", padding: "6px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6 }}>
+              {NAV.map((n) => (
+                <button key={n.key} onClick={() => setSection(n.key)} style={{ ...bsm({ padding: "8px 6px", borderRadius: 12, border: "1px solid " + (section === n.key ? G + "50" : "transparent"), background: section === n.key ? G + "22" : "transparent", color: section === n.key ? G : T2, fontWeight: section === n.key ? 600 : 500 }) }}>
+                  {n.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
       </div>
       )}
