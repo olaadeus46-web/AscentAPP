@@ -154,23 +154,70 @@ function AllocationCard({ allocation, incomeTotal, actualAmount, categories, onC
   );
 }
 
-function TransactionCard({ item, category, accountName, onDelete }) {
+function TransactionCard({ item, category, accountName, categories, bankAccounts, isEditing, draft, onEdit, onDraftChange, onSaveEdit, onCancelEdit, onDelete }) {
   const color = category?.color || T2;
+  const draftCategories = categories.filter((entry) => entry.kind === (draft?.kind || "expense"));
 
   return (
-    <div style={{ ...card({ padding: "14px 14px" }), borderColor: color + "25" }}>
+    <div style={{ ...card({ padding: "14px 14px" }), borderColor: isEditing ? BL + "45" : color + "25" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 10 }}>
         <div style={{ minWidth: 0 }}>
-          <p style={{ color: T, fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{item.description}</p>
-          <p style={{ color: T3, fontSize: 11 }}>{item.date} · {accountName || "—"}</p>
+          {isEditing ? (
+            <>
+              <input style={{ ...inp, marginBottom: 8 }} value={draft.description} onChange={(e) => onDraftChange("description", e.target.value)} placeholder="Descrição" />
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <input style={inp} type="date" value={draft.date} onChange={(e) => onDraftChange("date", e.target.value)} />
+                <select style={inp} value={draft.accountId} onChange={(e) => onDraftChange("accountId", e.target.value)}>
+                  <option value="">Conta</option>
+                  {bankAccounts.map((entry) => <option key={entry.id} value={String(entry.id)}>{entry.name}</option>)}
+                </select>
+              </div>
+            </>
+          ) : (
+            <>
+              <p style={{ color: T, fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{item.description}</p>
+              <p style={{ color: T3, fontSize: 11 }}>{item.date} · {accountName || "—"}</p>
+            </>
+          )}
         </div>
-        <button onClick={onDelete} style={bsm({ color: RD, borderColor: RD + "30", flexShrink: 0 })}>×</button>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+          {isEditing ? (
+            <>
+              <button onClick={onSaveEdit} style={bsm({ color: G, borderColor: G + "30" })}>Guardar</button>
+              <button onClick={onCancelEdit} style={bsm({ color: T2, borderColor: BD2 })}>Cancelar</button>
+            </>
+          ) : (
+            <>
+              <button onClick={onEdit} style={bsm({ color: BL, borderColor: BL + "30" })}>Editar</button>
+              <button onClick={onDelete} style={bsm({ color: RD, borderColor: RD + "30" })}>×</button>
+            </>
+          )}
+        </div>
       </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 10 }}>
-        <span style={{ fontSize: 11, color, border: "1px solid " + color + "40", background: color + "15", padding: "4px 8px", borderRadius: 999 }}>{category?.name || "Sem categoria"}</span>
-        <span style={{ fontSize: 11, color: T3 }}>{item.source === "ai-import" ? "AI" : "Manual"}</span>
-      </div>
-      <p style={{ color: item.kind === "income" ? GR : RD, fontSize: 16, fontWeight: 700 }}>{item.kind === "income" ? "+" : "-"}CHF {fmtF(item.amount)}</p>
+      {isEditing ? (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+            <select style={inp} value={draft.kind} onChange={(e) => onDraftChange("kind", e.target.value)}>
+              <option value="expense">Despesa</option>
+              <option value="income">Entrada</option>
+            </select>
+            <select style={inp} value={draft.categoryId} onChange={(e) => onDraftChange("categoryId", e.target.value)}>
+              <option value="">Categoria</option>
+              {draftCategories.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+            </select>
+          </div>
+          <input style={{ ...inp, marginBottom: 8 }} type="number" step="0.01" value={draft.amount} onChange={(e) => onDraftChange("amount", e.target.value)} placeholder="Montante" />
+          <textarea style={{ ...inp, minHeight: 62, resize: "vertical" }} value={draft.notes} onChange={(e) => onDraftChange("notes", e.target.value)} placeholder="Notas" />
+        </>
+      ) : (
+        <>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 10 }}>
+            <span style={{ fontSize: 11, color, border: "1px solid " + color + "40", background: color + "15", padding: "4px 8px", borderRadius: 999 }}>{category?.name || "Sem categoria"}</span>
+            <span style={{ fontSize: 11, color: T3 }}>{item.source === "ai-import" ? "AI" : "Manual"}</span>
+          </div>
+          <p style={{ color: item.kind === "income" ? GR : RD, fontSize: 16, fontWeight: 700 }}>{item.kind === "income" ? "+" : "-"}CHF {fmtF(item.amount)}</p>
+        </>
+      )}
     </div>
   );
 }
@@ -195,6 +242,16 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [uploadResult, setUploadResult] = useState(null);
+  const [editingTransactionId, setEditingTransactionId] = useState(null);
+  const [editingDraft, setEditingDraft] = useState({
+    accountId: "",
+    date: currentDateValue(),
+    description: "",
+    amount: "",
+    kind: "expense",
+    categoryId: "",
+    notes: "",
+  });
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -299,7 +356,7 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
     saveFinanceData((prev) => normalizeFinanceData(typeof updater === "function" ? updater(normalizeFinanceData(prev || createDefaultFinanceData())) : updater));
   };
 
-  const addTransaction = () => {
+  const saveTransaction = () => {
     const amount = normalizeAmount(transactionForm.amount);
     if (!transactionForm.accountId || !transactionForm.date || !transactionForm.description.trim() || !amount || !transactionForm.categoryId) return;
 
@@ -323,6 +380,58 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
     }));
 
     setTransactionForm((prev) => ({ ...prev, date: currentDateValue(), description: "", amount: "", notes: "" }));
+  };
+
+  const startInlineEdit = (transaction) => {
+    setEditingTransactionId(transaction.id);
+    setEditingDraft({
+      accountId: String(transaction.accountId || ""),
+      date: transaction.date || currentDateValue(),
+      description: transaction.description || "",
+      amount: transaction.amount ? String(transaction.amount) : "",
+      kind: transaction.kind === "income" ? "income" : "expense",
+      categoryId: transaction.categoryId || "",
+      notes: transaction.notes || "",
+    });
+  };
+
+  const onInlineDraftChange = (field, value) => {
+    setEditingDraft((prev) => {
+      if (field === "kind") {
+        const nextCategories = normalizedFinanceData.categories.filter((item) => item.kind === value);
+        const nextCategoryId = nextCategories.some((item) => item.id === prev.categoryId) ? prev.categoryId : nextCategories[0]?.id || "";
+        return { ...prev, kind: value, categoryId: nextCategoryId };
+      }
+      return { ...prev, [field]: value };
+    });
+  };
+
+  const cancelInlineEdit = () => {
+    setEditingTransactionId(null);
+  };
+
+  const saveInlineEdit = () => {
+    if (editingTransactionId === null) return;
+    const amount = normalizeAmount(editingDraft.amount);
+    if (!editingDraft.accountId || !editingDraft.date || !editingDraft.description.trim() || !amount || !editingDraft.categoryId) return;
+
+    persistFinance((prev) => ({
+      ...prev,
+      transactions: prev.transactions.map((item) => item.id === editingTransactionId
+        ? {
+          ...item,
+          accountId: String(editingDraft.accountId),
+          date: editingDraft.date,
+          description: editingDraft.description.trim(),
+          amount,
+          kind: editingDraft.kind,
+          categoryId: editingDraft.categoryId,
+          notes: editingDraft.notes.trim(),
+        }
+        : item),
+    }));
+
+    setEditingTransactionId(null);
   };
 
   const deleteTransaction = (id) => {
@@ -619,8 +728,8 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
                 <span style={lbl}>Notas</span>
                 <textarea style={{ ...inp, minHeight: 70, resize: "vertical" }} value={transactionForm.notes} onChange={(e) => setTransactionForm((prev) => ({ ...prev, notes: e.target.value }))} placeholder="Observações opcionais" />
               </div>
-              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
-                <button style={{ ...btnG, width: isCompact ? "100%" : "auto" }} onClick={addTransaction}>Adicionar transação</button>
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14, gap: 8, flexWrap: "wrap" }}>
+                <button style={{ ...btnG, width: isCompact ? "100%" : "auto" }} onClick={saveTransaction}>Adicionar transação</button>
               </div>
             </div>
 
@@ -662,7 +771,7 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
               <p style={{ color: T3, fontSize: 13 }}>Ainda não existem movimentos registados para este mês.</p>
             ) : isCompact ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {monthTransactions.map((item) => <TransactionCard key={item.id} item={item} category={categoriesById[item.categoryId]} accountName={accountNameById[item.accountId]} onDelete={() => deleteTransaction(item.id)} />)}
+                {monthTransactions.map((item) => <TransactionCard key={item.id} item={item} category={categoriesById[item.categoryId]} accountName={accountNameById[item.accountId]} categories={normalizedFinanceData.categories} bankAccounts={bankAccounts} isEditing={editingTransactionId === item.id} draft={editingDraft} onEdit={() => startInlineEdit(item)} onDraftChange={onInlineDraftChange} onSaveEdit={saveInlineEdit} onCancelEdit={cancelInlineEdit} onDelete={() => deleteTransaction(item.id)} />)}
               </div>
             ) : (
               <div style={{ overflowX: "auto" }}>
@@ -678,15 +787,57 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
                     {monthTransactions.map((item) => {
                       const category = categoriesById[item.categoryId];
                       const color = category?.color || T2;
+                      const isEditingRow = editingTransactionId === item.id;
+                      const rowCategories = normalizedFinanceData.categories.filter((entry) => entry.kind === editingDraft.kind);
                       return (
-                        <tr key={item.id} style={{ borderBottom: "1px solid " + BD }}>
-                          <td style={{ padding: "11px 8px", color: T2, fontSize: 12 }}>{item.date}</td>
-                          <td style={{ padding: "11px 8px", color: T, fontSize: 12 }}>{accountNameById[item.accountId] || "—"}</td>
-                          <td style={{ padding: "11px 8px", color: T, fontSize: 13 }}>{item.description}</td>
-                          <td style={{ padding: "11px 8px" }}><span style={{ fontSize: 11, color, border: "1px solid " + color + "40", background: color + "15", padding: "4px 8px", borderRadius: 999 }}>{category?.name || "Sem categoria"}</span></td>
+                        <tr key={item.id} style={{ borderBottom: "1px solid " + BD, background: isEditingRow ? BL + "10" : "transparent" }}>
+                          <td style={{ padding: "11px 8px", color: T2, fontSize: 12 }}>
+                            {isEditingRow ? <input style={inp} type="date" value={editingDraft.date} onChange={(e) => onInlineDraftChange("date", e.target.value)} /> : item.date}
+                          </td>
+                          <td style={{ padding: "11px 8px", color: T, fontSize: 12 }}>
+                            {isEditingRow ? (
+                              <select style={inp} value={editingDraft.accountId} onChange={(e) => onInlineDraftChange("accountId", e.target.value)}>
+                                <option value="">Conta</option>
+                                {bankAccounts.map((entry) => <option key={entry.id} value={String(entry.id)}>{entry.name}</option>)}
+                              </select>
+                            ) : (accountNameById[item.accountId] || "—")}
+                          </td>
+                          <td style={{ padding: "11px 8px", color: T, fontSize: 13 }}>
+                            {isEditingRow ? <input style={inp} value={editingDraft.description} onChange={(e) => onInlineDraftChange("description", e.target.value)} /> : item.description}
+                          </td>
+                          <td style={{ padding: "11px 8px" }}>
+                            {isEditingRow ? (
+                              <div style={{ display: "grid", gap: 8 }}>
+                                <select style={inp} value={editingDraft.kind} onChange={(e) => onInlineDraftChange("kind", e.target.value)}>
+                                  <option value="expense">Despesa</option>
+                                  <option value="income">Entrada</option>
+                                </select>
+                                <select style={inp} value={editingDraft.categoryId} onChange={(e) => onInlineDraftChange("categoryId", e.target.value)}>
+                                  <option value="">Categoria</option>
+                                  {rowCategories.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+                                </select>
+                              </div>
+                            ) : <span style={{ fontSize: 11, color, border: "1px solid " + color + "40", background: color + "15", padding: "4px 8px", borderRadius: 999 }}>{category?.name || "Sem categoria"}</span>}
+                          </td>
                           <td style={{ padding: "11px 8px", color: T3, fontSize: 11 }}>{item.source === "ai-import" ? "AI" : "Manual"}</td>
-                          <td style={{ padding: "11px 8px", color: item.kind === "income" ? GR : RD, fontSize: 13, fontWeight: 700 }}>{item.kind === "income" ? "+" : "-"}CHF {fmtF(item.amount)}</td>
-                          <td style={{ padding: "11px 8px" }}><button onClick={() => deleteTransaction(item.id)} style={bsm({ color: RD, borderColor: RD + "30" })}>×</button></td>
+                          <td style={{ padding: "11px 8px", color: isEditingRow ? T : item.kind === "income" ? GR : RD, fontSize: 13, fontWeight: 700 }}>
+                            {isEditingRow ? <input style={inp} type="number" step="0.01" value={editingDraft.amount} onChange={(e) => onInlineDraftChange("amount", e.target.value)} /> : `${item.kind === "income" ? "+" : "-"}CHF ${fmtF(item.amount)}`}
+                          </td>
+                          <td style={{ padding: "11px 8px" }}>
+                            <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
+                              {isEditingRow ? (
+                                <>
+                                  <button onClick={saveInlineEdit} style={bsm({ color: G, borderColor: G + "30" })}>Guardar</button>
+                                  <button onClick={cancelInlineEdit} style={bsm({ color: T2, borderColor: BD2 })}>Cancelar</button>
+                                </>
+                              ) : (
+                                <>
+                                  <button onClick={() => startInlineEdit(item)} style={bsm({ color: BL, borderColor: BL + "30" })}>Editar</button>
+                                  <button onClick={() => deleteTransaction(item.id)} style={bsm({ color: RD, borderColor: RD + "30" })}>×</button>
+                                </>
+                              )}
+                            </div>
+                          </td>
                         </tr>
                       );
                     })}

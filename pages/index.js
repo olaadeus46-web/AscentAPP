@@ -247,6 +247,12 @@ export default function App() {
         <title>Rota ao Milhão</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="description" content="Acompanha o teu patrimônio, planeia o teu tempo e desenvolve as tuas fontes de rendimento. Tudo num só lugar." />
+        <meta name="theme-color" content="#07090f" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="ASCENT" />
+        <link rel="icon" href="/ascent-icon.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&family=Playfair+Display:wght@400;600&display=swap" rel="stylesheet" />
       </Head>
