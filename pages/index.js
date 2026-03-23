@@ -212,11 +212,11 @@ export default function App() {
   }, []);
 
   const NAV = [
-    { key: "patrimonio", label: "Patrimônio" },
-    { key: "financas", label: "Finanças" },
-    { key: "ideias", label: "Ideias" },
-    { key: "objetivos", label: "Objetivos" },
-    { key: "calendario", label: "Calendário" },
+    { key: "patrimonio", label: "Patrimônio", icon: "💰" },
+    { key: "financas", label: "Finanças", icon: "📊" },
+    { key: "ideias", label: "Ideias", icon: "💡" },
+    { key: "objetivos", label: "Objetivos", icon: "🎯" },
+    { key: "calendario", label: "Calendário", icon: "📅" },
   ];
 
   useEffect(() => {
@@ -271,25 +271,24 @@ export default function App() {
           <style>{`*{box-sizing:border-box;margin:0;padding:0;}html,body{min-height:100%;background:${BG};}body{padding:0;margin:0;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}input[type=number]::-webkit-inner-spin-button{opacity:.3;}select option{background:${S2};color:${T};}button{-webkit-tap-highlight-color:transparent;}*{scrollbar-width:thin;scrollbar-color:${BD2} transparent;}::-webkit-scrollbar{height:8px;width:8px;}::-webkit-scrollbar-thumb{background:${BD2};border-radius:99px;}@media (max-width: 900px){input,select,textarea{font-size:16px !important;}}`}</style>
 
           <div style={{ background: "rgba(12,17,32,.72)", backdropFilter: "blur(16px)", borderBottom: "1px solid " + BD, position: "sticky", top: 0, zIndex: 50 }}>
-            <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "10px 14px" : "0 24px", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 58, gap: 12, flexWrap: isMobile ? "wrap" : "nowrap" }}>
+            <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "10px 14px" : "0 24px", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 58, gap: 12, flexWrap: "nowrap" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: G }} />
-                <span style={{ fontFamily: APP_FONT, fontWeight: 700, letterSpacing: 0.3, fontSize: 16, color: T }}>ASCENT</span>
+                <img src="/apple-touch-icon.png" alt="A" style={{ width: 44, height: 44, borderRadius: 12, display: "block", flexShrink: 0 }} />
               </div>
               {isMobile ? (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto", width: "100%", justifyContent: "space-between" }}>
-                  <span style={{ fontSize: 12, color: T2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "65%" }}>{user.name}</span>
-                  <button style={bsm({ padding: "6px 12px", borderRadius: 999 })} onClick={logout}>Sair</button>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto", minWidth: 0, flexShrink: 1 }}>
+                  <span style={{ fontSize: 12, color: T2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{user.name}</span>
+                  <button title="Sair" aria-label="Sair" style={bsm({ padding: "6px 10px", borderRadius: 999, minWidth: 34 })} onClick={logout}>logout</button>
                 </div>
               ) : (
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
                   <div style={{ display: "flex" }}>
                     {NAV.map((n) => (
-                      <button key={n.key} onClick={() => setSection(n.key)} style={{ background: "transparent", border: "none", color: section === n.key ? G : T2, padding: "13px 18px", fontSize: 13, fontFamily: "'Outfit',sans-serif", cursor: "pointer", fontWeight: section === n.key ? 600 : 400, borderBottom: "2px solid " + (section === n.key ? G : "transparent"), whiteSpace: "nowrap", transition: "all .15s" }}>{n.label}</button>
+                      <button title={n.label} aria-label={n.label} key={n.key} onClick={() => setSection(n.key)} style={{ background: "transparent", border: "none", color: section === n.key ? G : T2, padding: "10px 14px", fontSize: 22, lineHeight: 1, fontFamily: "'Outfit',sans-serif", cursor: "pointer", fontWeight: section === n.key ? 600 : 400, borderBottom: "2px solid " + (section === n.key ? G : "transparent"), whiteSpace: "nowrap", transition: "all .15s" }}>{n.icon}</button>
                     ))}
                   </div>
                   <span style={{ fontSize: 12, color: T2 }}>{user.name}</span>
-                  <button style={bsm()} onClick={logout}>Sair</button>
+                  <button title="Sair" aria-label="Sair" style={bsm()} onClick={logout}>logout</button>
                 </div>
               )}
             </div>
@@ -297,7 +296,7 @@ export default function App() {
 
           <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "16px 14px 20px" : "28px 24px" }}>
             {section === "patrimonio" && <PatrimonioSection portfolios={portfolios} savePortfolios={savePortfolios} prices={prices} setPrices={setPrices} fx={fx} setFx={setFx} nwHistory={nwHistory} saveNwHistory={saveNwHistory} baseCurrency={baseCurrency} onUpdateBaseCurrency={updateBaseCurrency} financeData={financeData} />}
-            {section === "financas" && <FinancasSection portfolios={portfolios} financeData={financeData} saveFinanceData={saveFinanceData} />}
+            {section === "financas" && <FinancasSection portfolios={portfolios} financeData={financeData} saveFinanceData={saveFinanceData} baseCurrency={baseCurrency} onUpdateBaseCurrency={updateBaseCurrency} fx={fx} />}
             {section === "ideias" && <IdeiasSection ideas={ideas} saveIdeas={saveIdeas} />}
             {section === "objetivos" && <ObjetivosSection goals={goals} saveGoals={saveGoals} onAddCalendarTask={addGoalSuggestionToCalendar} />}
             {section === "calendario" && <CalendarView slots={calendarSlots} onSaveSlots={saveCalendarSlots} newSlotPrefill={calendarSlotPrefill} onConsumeNewSlotPrefill={consumeCalendarSlotPrefill} />}
@@ -307,7 +306,7 @@ export default function App() {
             <div style={{ position: "fixed", left: 10, right: 10, bottom: "calc(8px + env(safe-area-inset-bottom, 0px))", zIndex: 70, background: "rgba(12,17,32,.82)", border: "1px solid " + BD, borderRadius: 18, backdropFilter: "blur(14px)", boxShadow: "0 16px 34px rgba(4,8,22,.45)", padding: "6px" }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 6 }}>
                 {NAV.map((n) => (
-                  <button key={n.key} onClick={() => setSection(n.key)} style={{ ...bsm({ padding: "8px 6px", borderRadius: 12, border: "1px solid " + (section === n.key ? G + "50" : "transparent"), background: section === n.key ? G + "22" : "transparent", color: section === n.key ? G : T2, fontWeight: section === n.key ? 600 : 500 }) }}>{n.label}</button>
+                  <button title={n.label} aria-label={n.label} key={n.key} onClick={() => setSection(n.key)} style={{ ...bsm({ padding: "8px 6px", borderRadius: 12, border: "1px solid " + (section === n.key ? G + "50" : "transparent"), background: section === n.key ? G + "22" : "transparent", color: section === n.key ? G : T2, fontWeight: section === n.key ? 600 : 500 }), fontSize: 20, lineHeight: 1 }}>{n.icon}</button>
                 ))}
               </div>
             </div>

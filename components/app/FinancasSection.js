@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import {
   G,
   S2,
@@ -11,13 +12,17 @@ import {
   RD,
   BL,
   PU,
+  CURRENCIES,
   fmtF,
   card,
   btnG,
   bsm,
   inp,
   lbl,
+  Modal,
   ProgressBar,
+  toChf,
+  toBaseCurrency,
 } from "./shared";
 import {
   buildTransactionFingerprint,
@@ -34,6 +39,28 @@ const FINANCE_TABS = [
   { key: "transactions", label: "Movimentos" },
   { key: "planning", label: "Planeamento" },
 ];
+const TRANSACTION_SOURCES = [
+  { value: "all", label: "Todas as origens" },
+  { value: "manual", label: "Manual" },
+  { value: "ai-import", label: "AI" },
+];
+const PLANNING_TABS = [
+  { key: "allocations", label: "ALOCAÇÕES MENSAIS" },
+  { key: "categories", label: "CATEGORIAS" },
+  { key: "allocation-status", label: "ESTADO DAS ALOCAÇÕES" },
+];
+const OVERVIEW_SECTIONS = [
+  { key: "summary", label: "Resumo" },
+  { key: "comparison", label: "Gráfico" },
+  { key: "breakdown", label: "Categorias" },
+];
+
+const DEFAULT_TRANSACTION_FILTERS = {
+  search: "",
+  kind: "all",
+  categoryId: "all",
+  source: "all",
+};
 
 function currentMonthValue() {
   return new Date().toISOString().slice(0, 7);
@@ -57,16 +84,40 @@ function normalizeAmount(value) {
   return Math.abs(Number(String(value || "").replace(",", ".")) || 0);
 }
 
+function clampPage(page, pageCount) {
+  return Math.min(Math.max(page, 1), Math.max(pageCount, 1));
+}
+
 function TabButton({ active, label, onClick }) {
   return (
     <button
       onClick={onClick}
       style={{
-        ...bsm({ padding: "10px 14px", fontSize: 12 }),
-        background: active ? G : "rgba(255,255,255,.03)",
+        ...bsm({ padding: "8px 10px", fontSize: 12 }),
+        background: active ? G + "18" : "transparent",
+        color: active ? G : T3,
+        border: "1px solid " + (active ? G + "45" : "transparent"),
+        borderRadius: 10,
+        fontWeight: active ? 700 : 500,
+        whiteSpace: "nowrap",
+        width: "100%",
+      }}>
+      {label}
+    </button>
+  );
+}
+
+function SectionToggleButton({ active, label, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        ...bsm({ padding: "9px 12px", fontSize: 12 }),
+        background: active ? G : "transparent",
         color: active ? "#111" : T2,
         border: "1px solid " + (active ? G : BD2),
-        whiteSpace: "nowrap",
+        borderRadius: 10,
+        fontWeight: 700,
       }}>
       {label}
     </button>
@@ -83,7 +134,93 @@ function FinanceStat({ label, value, note, color = T, compact = false }) {
   );
 }
 
-function ExpenseBreakdown({ rows, totalExpenses }) {
+function MonthlyComparisonChart({ rows, categoryLabel, compact, currencyLabel }) {
+  if (!rows.length) {
+    return (
+      <div style={{ height: compact ? 200 : 240, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <p style={{ fontSize: 12, color: T3 }}>Sem dados para o período selecionado.</p>
+      </div>
+    );
+  }
+
+  const Tip = ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div style={{ background: S2, border: "1px solid " + BD2, borderRadius: 8, padding: "9px 12px" }}>
+        <p style={{ fontSize: 11, color: T2, marginBottom: 3 }}>{label}</p>
+        <p style={{ fontSize: 13, color: G, fontWeight: 700 }}>{currencyLabel} {fmtF(payload[0].value || 0)}</p>
+        <p style={{ fontSize: 10, color: T3, marginTop: 2 }}>{categoryLabel}</p>
+      </div>
+    );
+  };
+
+  return (
+    <ResponsiveContainer width="100%" height={compact ? 210 : 250}>
+      <AreaChart data={rows} margin={{ top: 6, right: 6, left: 0, bottom: 0 }}>
+        <defs>
+          <linearGradient id="financeComparisonGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor={G} stopOpacity={0.22} />
+            <stop offset="95%" stopColor={G} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <XAxis dataKey="label" tick={{ fontSize: 11, fill: T3 }} tickLine={false} axisLine={false} />
+        <YAxis tick={{ fontSize: 11, fill: T3 }} tickLine={false} axisLine={false} width={42} tickFormatter={(value) => (value >= 1000 ? `${Math.round(value / 1000)}K` : `${Math.round(value)}`)} />
+        <Tooltip content={<Tip />} />
+        <Area type="monotone" dataKey="value" stroke={G} strokeWidth={2} fill="url(#financeComparisonGrad)" dot={false} activeDot={{ r: 4, fill: G, strokeWidth: 0 }} />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+
+function PaginationControls({ page, pageCount, onPageChange, compact = false }) {
+  if (pageCount <= 1) return null;
+
+  const pages = [];
+  const start = Math.max(1, page - 1);
+  const end = Math.min(pageCount, page + 1);
+  for (let index = start; index <= end; index += 1) {
+    pages.push(index);
+  }
+
+  if (!pages.includes(1)) {
+    pages.unshift(1);
+  }
+
+  if (!pages.includes(pageCount)) {
+    pages.push(pageCount);
+  }
+
+  const uniquePages = pages.filter((value, index) => pages.indexOf(value) === index);
+
+  return (
+    <div style={{ display: "flex", justifyContent: compact ? "stretch" : "space-between", alignItems: compact ? "stretch" : "center", gap: 10, flexWrap: "wrap", marginTop: 16, flexDirection: compact ? "column" : "row" }}>
+      <p style={{ fontSize: 12, color: T3 }}>Página {page} de {pageCount}</p>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", width: compact ? "100%" : "auto" }}>
+        <button title="Página anterior" aria-label="Página anterior" onClick={() => onPageChange(page - 1)} disabled={page <= 1} style={{ ...bsm({ padding: "8px 12px", flex: compact ? 1 : "unset" }), opacity: page <= 1 ? 0.45 : 1 }}>
+          ←
+        </button>
+        {uniquePages.map((value) => (
+          <button
+            key={value}
+            onClick={() => onPageChange(value)}
+            style={{
+              ...bsm({ padding: "8px 12px", minWidth: 42, flex: compact ? 1 : "unset" }),
+              background: value === page ? G : "transparent",
+              color: value === page ? "#111" : T2,
+              border: "1px solid " + (value === page ? G : BD2),
+            }}>
+            {value}
+          </button>
+        ))}
+        <button title="Página seguinte" aria-label="Página seguinte" onClick={() => onPageChange(page + 1)} disabled={page >= pageCount} style={{ ...bsm({ padding: "8px 12px", flex: compact ? 1 : "unset" }), opacity: page >= pageCount ? 0.45 : 1 }}>
+          →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ExpenseBreakdown({ rows, totalExpenses, currencyLabel }) {
   if (!rows.length) {
     return <p style={{ fontSize: 13, color: T3 }}>Ainda não existem despesas neste mês.</p>;
   }
@@ -99,7 +236,7 @@ function ExpenseBreakdown({ rows, totalExpenses }) {
                 <span style={{ width: 10, height: 10, borderRadius: 999, background: row.color, flexShrink: 0 }} />
                 <span style={{ fontSize: 13, color: T, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{row.name}</span>
               </div>
-              <span style={{ fontSize: 12, color: T2 }}>CHF {fmtF(row.amount)} · {share.toFixed(1)}%</span>
+              <span style={{ fontSize: 12, color: T2 }}>{currencyLabel} {fmtF(row.amount)} · {share.toFixed(1)}%</span>
             </div>
             <ProgressBar value={row.amount} max={totalExpenses || 1} color={row.color} height={5} />
           </div>
@@ -109,52 +246,106 @@ function ExpenseBreakdown({ rows, totalExpenses }) {
   );
 }
 
-function AllocationCard({ allocation, incomeTotal, actualAmount, categories, onChange, onRemove, compact = false }) {
+function AllocationCard({ allocation, incomeTotal, actualAmount, categoriesById, onEdit, onRemove, compact = false, currencyLabel }) {
   const targetAmount = incomeTotal * ((Number(allocation.percent) || 0) / 100);
   const progressMax = Math.max(targetAmount, actualAmount, 1);
-  const linkedCategories = categories.filter((item) => allocation.categoryIds.includes(item.id));
+  const linkedCategories = allocation.categoryIds
+    .map((id) => categoriesById[id])
+    .filter(Boolean);
 
   return (
     <div style={{ ...card({ padding: "16px 18px" }) }}>
-      <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr" : "minmax(0,1fr) 110px auto", gap: 10, alignItems: "center", marginBottom: 12 }}>
-        <input style={inp} value={allocation.name} onChange={(e) => onChange({ ...allocation, name: e.target.value })} placeholder="Nome da alocação" />
-        <input style={inp} type="number" min="0" max="100" step="0.1" value={allocation.percent} onChange={(e) => onChange({ ...allocation, percent: Number(e.target.value) || 0 })} />
-        <button onClick={onRemove} style={bsm({ color: RD, borderColor: RD + "35" })}>Remover</button>
+      <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr" : "minmax(0,1fr) auto auto", gap: 10, alignItems: "center", marginBottom: 12 }}>
+        <div>
+          <p style={{ fontSize: 14, color: T, fontWeight: 600 }}>{allocation.name}</p>
+          <p style={{ fontSize: 11, color: T3, marginTop: 4 }}>{Number(allocation.percent) || 0}% do rendimento mensal</p>
+        </div>
+        <button onClick={onEdit} title="Editar alocação" aria-label="Editar alocação" style={bsm({ color: BL, borderColor: BL + "30", minWidth: 34, padding: "6px 10px" })}>✎</button>
+        <button onClick={onRemove} title="Remover alocação" aria-label="Remover alocação" style={bsm({ color: RD, borderColor: RD + "35", minWidth: 34, padding: "6px 10px" })}>🗑</button>
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 8, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 12, color: T2 }}>Meta mensal: CHF {fmtF(targetAmount)}</span>
-        <span style={{ fontSize: 12, color: actualAmount > targetAmount && targetAmount > 0 ? RD : GR }}>Actual: CHF {fmtF(actualAmount)}</span>
+        <span style={{ fontSize: 12, color: T2 }}>Meta mensal: {currencyLabel} {fmtF(targetAmount)}</span>
+        <span style={{ fontSize: 12, color: actualAmount > targetAmount && targetAmount > 0 ? RD : GR }}>Actual: {currencyLabel} {fmtF(actualAmount)}</span>
       </div>
       <ProgressBar value={actualAmount} max={progressMax} color={actualAmount > targetAmount && targetAmount > 0 ? RD : G} height={6} />
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
-        {categories.filter((item) => item.kind === "expense").map((category) => {
-          const active = allocation.categoryIds.includes(category.id);
-          return (
-            <button
-              key={category.id}
-              onClick={() => onChange({
-                ...allocation,
-                categoryIds: active
-                  ? allocation.categoryIds.filter((item) => item !== category.id)
-                  : [...allocation.categoryIds, category.id],
-              })}
-              style={{
-                ...bsm({ padding: "6px 10px", fontSize: 11 }),
-                background: active ? category.color : "transparent",
-                color: active ? "#111" : T2,
-                border: "1px solid " + (active ? category.color : BD2),
-              }}>
-              {category.name}
-            </button>
-          );
-        })}
-      </div>
       {linkedCategories.length > 0 && <p style={{ fontSize: 11, color: T3, marginTop: 10 }}>Ligado a: {linkedCategories.map((item) => item.name).join(", ")}</p>}
+      {linkedCategories.length === 0 && <p style={{ fontSize: 11, color: T3, marginTop: 10 }}>Sem categorias ligadas.</p>}
     </div>
   );
 }
 
-function TransactionCard({ item, category, accountName, categories, bankAccounts, isEditing, draft, onEdit, onDraftChange, onSaveEdit, onCancelEdit, onDelete }) {
+function AllocationEditorModal({
+  isCompact,
+  title,
+  draft,
+  categories,
+  incomeTotal,
+  onChangeDraft,
+  onCancel,
+  onSave,
+  savingLabel,
+  currencyLabel,
+}) {
+  const targetAmount = incomeTotal * ((Number(draft.percent) || 0) / 100);
+
+  return (
+    <Modal title={title} onClose={onCancel} wide>
+      <div style={{ display: "grid", gap: 12 }}>
+        <div>
+          <span style={lbl}>Nome da alocação *</span>
+          <input style={inp} value={draft.name} onChange={(e) => onChangeDraft((prev) => ({ ...prev, name: e.target.value }))} placeholder="Ex: Despesas Fixas" />
+        </div>
+        <div>
+          <span style={lbl}>Percentagem (%)</span>
+          <input
+            style={inp}
+            type="number"
+            min="0"
+            max="100"
+            step="0.1"
+            value={draft.percent}
+            onChange={(e) => onChangeDraft((prev) => ({ ...prev, percent: Number(e.target.value) || 0 }))}
+          />
+          <p style={{ fontSize: 11, color: T3, marginTop: 6 }}>Meta mensal estimada: {currencyLabel} {fmtF(targetAmount)}</p>
+        </div>
+
+        <div>
+          <span style={lbl}>Categorias de despesa</span>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {categories.map((category) => {
+              const active = draft.categoryIds.includes(category.id);
+              return (
+                <button
+                  key={category.id}
+                  onClick={() => onChangeDraft((prev) => ({
+                    ...prev,
+                    categoryIds: active
+                      ? prev.categoryIds.filter((item) => item !== category.id)
+                      : [...prev.categoryIds, category.id],
+                  }))}
+                  style={{
+                    ...bsm({ padding: "6px 10px", fontSize: 11 }),
+                    background: active ? category.color : "transparent",
+                    color: active ? "#111" : T2,
+                    border: "1px solid " + (active ? category.color : BD2),
+                  }}>
+                  {category.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 18, gap: 8, flexWrap: "wrap" }}>
+        <button title="Cancelar" aria-label="Cancelar" style={bsm({ width: isCompact ? "100%" : "auto" })} onClick={onCancel}>×</button>
+        <button title={savingLabel} aria-label={savingLabel} style={{ ...btnG, width: isCompact ? "100%" : "auto" }} onClick={onSave}>✓</button>
+      </div>
+    </Modal>
+  );
+}
+
+function TransactionCard({ item, category, accountName, categories, bankAccounts, isEditing, draft, onEdit, onDraftChange, onSaveEdit, onCancelEdit, onDelete, currencyLabel }) {
   const color = category?.color || T2;
   const draftCategories = categories.filter((entry) => entry.kind === (draft?.kind || "expense"));
 
@@ -183,13 +374,13 @@ function TransactionCard({ item, category, accountName, categories, bankAccounts
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
           {isEditing ? (
             <>
-              <button onClick={onSaveEdit} style={bsm({ color: G, borderColor: G + "30" })}>Guardar</button>
-              <button onClick={onCancelEdit} style={bsm({ color: T2, borderColor: BD2 })}>Cancelar</button>
+              <button title="Guardar" aria-label="Guardar" onClick={onSaveEdit} style={bsm({ color: G, borderColor: G + "30" })}>✓</button>
+              <button title="Cancelar" aria-label="Cancelar" onClick={onCancelEdit} style={bsm({ color: T2, borderColor: BD2 })}>↩</button>
             </>
           ) : (
             <>
-              <button onClick={onEdit} style={bsm({ color: BL, borderColor: BL + "30" })}>Editar</button>
-              <button onClick={onDelete} style={bsm({ color: RD, borderColor: RD + "30" })}>×</button>
+              <button title="Editar" aria-label="Editar" onClick={onEdit} style={bsm({ color: BL, borderColor: BL + "30" })}>✎</button>
+              <button title="Eliminar" aria-label="Eliminar" onClick={onDelete} style={bsm({ color: RD, borderColor: RD + "30" })}>🗑</button>
             </>
           )}
         </div>
@@ -215,24 +406,148 @@ function TransactionCard({ item, category, accountName, categories, bankAccounts
             <span style={{ fontSize: 11, color, border: "1px solid " + color + "40", background: color + "15", padding: "4px 8px", borderRadius: 999 }}>{category?.name || "Sem categoria"}</span>
             <span style={{ fontSize: 11, color: T3 }}>{item.source === "ai-import" ? "AI" : "Manual"}</span>
           </div>
-          <p style={{ color: item.kind === "income" ? GR : RD, fontSize: 16, fontWeight: 700 }}>{item.kind === "income" ? "+" : "-"}CHF {fmtF(item.amount)}</p>
+          <p style={{ color: item.kind === "income" ? GR : RD, fontSize: 16, fontWeight: 700 }}>{item.kind === "income" ? "+" : "-"}{currencyLabel} {fmtF(item.amount)}</p>
         </>
       )}
     </div>
   );
 }
 
-export default function FinancasSection({ portfolios, financeData, saveFinanceData }) {
+function TransactionFormModal({ isCompact, transactionForm, setTransactionForm, kindOptions, bankAccounts, onSave, onClose }) {
+  return (
+    <Modal title="Nova Transação" onClose={onClose} wide>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <p style={{ fontSize: 12, color: T2, fontWeight: 700, letterSpacing: 1 }}>NOVA TRANSAÇÃO</p>
+          <p style={{ fontSize: 12, color: T3, marginTop: 4 }}>Regista manualmente os movimentos do mês.</p>
+        </div>
+        <div style={{ display: "flex", gap: 6, width: isCompact ? "100%" : "auto" }}>
+          {[{ key: "expense", label: "Despesa", symbol: "↘", color: RD }, { key: "income", label: "Entrada", symbol: "↗", color: GR }].map((option) => (
+            <button title={option.label} aria-label={option.label} key={option.key} onClick={() => setTransactionForm((prev) => ({ ...prev, kind: option.key }))} style={{ ...bsm({ padding: "9px 12px", flex: isCompact ? 1 : "unset" }), background: transactionForm.kind === option.key ? option.color : "transparent", color: transactionForm.kind === option.key ? "#111" : T2, border: "1px solid " + (transactionForm.kind === option.key ? option.color : BD2) }}>{option.symbol}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: isCompact ? "1fr" : "repeat(auto-fit,minmax(180px,1fr))", gap: 12 }}>
+        <div>
+          <span style={lbl}>Conta *</span>
+          <select style={inp} value={transactionForm.accountId} onChange={(e) => setTransactionForm((prev) => ({ ...prev, accountId: e.target.value }))}>
+            <option value="">Selecionar conta</option>
+            {bankAccounts.map((item) => <option key={item.id} value={String(item.id)}>{item.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <span style={lbl}>Data *</span>
+          <input style={inp} type="date" value={transactionForm.date} onChange={(e) => setTransactionForm((prev) => ({ ...prev, date: e.target.value }))} />
+        </div>
+        <div>
+          <span style={lbl}>Montante *</span>
+          <input style={inp} type="number" step="0.01" placeholder="ex: 48.90" value={transactionForm.amount} onChange={(e) => setTransactionForm((prev) => ({ ...prev, amount: e.target.value }))} />
+        </div>
+        <div>
+          <span style={lbl}>Moeda *</span>
+          <select style={inp} value={transactionForm.currency} onChange={(e) => setTransactionForm((prev) => ({ ...prev, currency: e.target.value }))}>
+            {CURRENCIES.map((currency) => <option key={currency} value={currency}>{currency}</option>)}
+          </select>
+        </div>
+        <div>
+          <span style={lbl}>Tipo *</span>
+          <select style={inp} value={transactionForm.categoryId} onChange={(e) => setTransactionForm((prev) => ({ ...prev, categoryId: e.target.value }))}>
+            <option value="">Selecionar categoria</option>
+            {kindOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 12 }}>
+        <span style={lbl}>Descrição *</span>
+        <input style={inp} placeholder="ex: Passe mensal, salário, eletricidade" value={transactionForm.description} onChange={(e) => setTransactionForm((prev) => ({ ...prev, description: e.target.value }))} />
+      </div>
+      <div style={{ marginTop: 12 }}>
+        <span style={lbl}>Notas</span>
+        <textarea style={{ ...inp, minHeight: 80, resize: "vertical" }} value={transactionForm.notes} onChange={(e) => setTransactionForm((prev) => ({ ...prev, notes: e.target.value }))} placeholder="Observações opcionais" />
+      </div>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16, gap: 8, flexWrap: "wrap" }}>
+        <button title="Cancelar" aria-label="Cancelar" style={bsm({ width: isCompact ? "100%" : "auto" })} onClick={onClose}>×</button>
+        <button title="Adicionar transação" aria-label="Adicionar transação" style={{ ...btnG, width: isCompact ? "100%" : "auto" }} onClick={onSave}>✓</button>
+      </div>
+    </Modal>
+  );
+}
+
+function StatementImportModal({ isCompact, fileInputRef, uploadFiles, setUploadFiles, uploadError, uploadResult, uploading, onImport, onClose, currencyLabel }) {
+  return (
+    <Modal title="Importar Extrato" onClose={onClose} wide>
+      <div style={{ marginBottom: 16 }}>
+        <p style={{ fontSize: 12, color: T2, fontWeight: 700, letterSpacing: 1 }}>IMPORTAR EXTRATO</p>
+        <p style={{ fontSize: 12, color: T3, marginTop: 4 }}>Envia imagens do extrato bancário para extrair automaticamente as transações do mês.</p>
+      </div>
+      <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={(e) => setUploadFiles(Array.from(e.target.files || []))} style={{ ...inp, padding: 10 }} />
+      {uploadFiles.length > 0 && <p style={{ fontSize: 12, color: T2, marginTop: 10 }}>{uploadFiles.length} ficheiro(s) preparado(s) para importação.</p>}
+      {uploadError && <p style={{ fontSize: 12, color: RD, marginTop: 10 }}>{uploadError}</p>}
+      {uploadResult && (
+        <div style={{ marginTop: 12, padding: "12px 14px", borderRadius: 12, background: S2, border: "1px solid " + BD }}>
+          <p style={{ fontSize: 13, color: T, marginBottom: 6 }}>{uploadResult.imported} transações importadas</p>
+          {uploadResult.skipped > 0 && <p style={{ fontSize: 11, color: T3, marginBottom: 8 }}>{uploadResult.skipped} movimento(s) ignorado(s) por já existirem.</p>}
+          {uploadResult.preview?.length > 0 && uploadResult.preview.map((item) => (
+            <div key={item.id} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 11, color: T2, paddingTop: 6 }}>
+              <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{item.date} · {item.description}</span>
+              <span>{item.kind === "income" ? "+" : "-"}{currencyLabel} {fmtF(item.amount)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16, gap: 8, flexWrap: "wrap" }}>
+        <button title="Fechar" aria-label="Fechar" style={bsm({ width: isCompact ? "100%" : "auto" })} onClick={onClose}>×</button>
+        <button title="Importar via AI" aria-label="Importar via AI" style={{ ...btnG, width: isCompact ? "100%" : "auto", opacity: uploading || !uploadFiles.length ? 0.55 : 1 }} onClick={onImport} disabled={uploading || !uploadFiles.length}>{uploading ? "⟳" : "⤴"}</button>
+      </div>
+    </Modal>
+  );
+}
+
+function DeleteTransactionConfirmModal({ isCompact, onCancel, onConfirm }) {
+  return (
+    <Modal title="Eliminar Movimento" onClose={onCancel}>
+      <p style={{ fontSize: 13, color: T2, lineHeight: 1.45 }}>
+        Queres mesmo eliminar este movimento? Esta ação não pode ser revertida.
+      </p>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 18, gap: 8, flexWrap: "wrap" }}>
+        <button title="Cancelar" aria-label="Cancelar" style={bsm({ width: isCompact ? "100%" : "auto" })} onClick={onCancel}>×</button>
+        <button style={{ ...bsm({ width: isCompact ? "100%" : "auto", color: RD, borderColor: RD + "35", background: "rgba(255,255,255,.02)" }) }} onClick={onConfirm}>
+          🗑
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+export default function FinancasSection({ portfolios, financeData, saveFinanceData, baseCurrency = "CHF", onUpdateBaseCurrency, fx = {} }) {
   const normalizedFinanceData = useMemo(() => normalizeFinanceData(financeData || createDefaultFinanceData()), [financeData]);
   const [selectedMonth, setSelectedMonth] = useState(currentMonthValue());
   const [selectedAccountId, setSelectedAccountId] = useState("all");
   const [activeTab, setActiveTab] = useState("overview");
   const [isCompact, setIsCompact] = useState(false);
+  const [showTransactionModal, setShowTransactionModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [deleteTransactionId, setDeleteTransactionId] = useState(null);
+  const [planningTab, setPlanningTab] = useState("allocations");
+  const [allocationEditorState, setAllocationEditorState] = useState({
+    open: false,
+    mode: "create",
+    allocationId: null,
+    draft: { name: "", percent: 0, categoryIds: [] },
+  });
+  const [transactionFilters, setTransactionFilters] = useState(DEFAULT_TRANSACTION_FILTERS);
+  const [transactionsPage, setTransactionsPage] = useState(1);
+  const [comparisonMonths, setComparisonMonths] = useState(6);
+  const [comparisonCategoryId, setComparisonCategoryId] = useState("all");
+  const [activeOverviewSection, setActiveOverviewSection] = useState("summary");
   const [transactionForm, setTransactionForm] = useState({
     accountId: "",
     date: currentDateValue(),
     description: "",
     amount: "",
+    currency: baseCurrency,
     kind: "expense",
     categoryId: "",
     notes: "",
@@ -253,6 +568,7 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
     notes: "",
   });
   const fileInputRef = useRef(null);
+  const convertFromChf = (value) => toBaseCurrency(value, baseCurrency, fx);
 
   useEffect(() => {
     const checkCompact = () => setIsCompact(window.innerWidth <= 720);
@@ -260,6 +576,14 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
     window.addEventListener("resize", checkCompact);
     return () => window.removeEventListener("resize", checkCompact);
   }, []);
+
+  useEffect(() => {
+    if (!isCompact || activeTab !== "transactions") return;
+    setTransactionFilters((prev) => {
+      const hasActiveFilters = prev.search || prev.kind !== "all" || prev.categoryId !== "all" || prev.source !== "all";
+      return hasActiveFilters ? DEFAULT_TRANSACTION_FILTERS : prev;
+    });
+  }, [isCompact, activeTab]);
 
   const bankAccounts = useMemo(() => {
     const direct = portfolios.filter((item) => ACCOUNT_TYPES.has(item.type));
@@ -283,9 +607,9 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
       const nextCategories = normalizedFinanceData.categories.filter((item) => item.kind === prev.kind);
       const nextCategoryId = nextCategories.some((item) => item.id === prev.categoryId) ? prev.categoryId : nextCategories[0]?.id || "";
       const defaultAccountId = prev.accountId || (selectedAccountId !== "all" ? String(selectedAccountId) : String(bankAccounts[0]?.id || ""));
-      return { ...prev, accountId: defaultAccountId, categoryId: nextCategoryId };
+      return { ...prev, accountId: defaultAccountId, categoryId: nextCategoryId, currency: prev.currency || baseCurrency };
     });
-  }, [normalizedFinanceData.categories, selectedAccountId, bankAccounts]);
+  }, [normalizedFinanceData.categories, selectedAccountId, bankAccounts, baseCurrency]);
 
   const monthTransactions = useMemo(() => {
     return normalizedFinanceData.transactions
@@ -318,6 +642,10 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
       return acc;
     }, { income: 0, expense: 0 });
   }, [monthTransactions]);
+  const displayTotals = useMemo(() => ({
+    income: convertFromChf(totals.income),
+    expense: convertFromChf(totals.expense),
+  }), [totals, baseCurrency, fx]);
 
   const expensesByCategory = useMemo(() => {
     const grouped = {};
@@ -330,6 +658,9 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
     });
     return Object.values(grouped).sort((a, b) => b.amount - a.amount);
   }, [monthTransactions, categoriesById]);
+  const displayExpensesByCategory = useMemo(() => (
+    expensesByCategory.map((item) => ({ ...item, amount: convertFromChf(item.amount) }))
+  ), [expensesByCategory, baseCurrency, fx]);
 
   const allocationStats = useMemo(() => {
     return normalizedFinanceData.allocations.map((allocation) => {
@@ -339,6 +670,12 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
       return { allocationId: allocation.id, amount };
     });
   }, [normalizedFinanceData.allocations, monthTransactions]);
+  const displayAllocationMap = useMemo(() => {
+    return allocationStats.reduce((acc, item) => {
+      acc[item.allocationId] = convertFromChf(item.amount);
+      return acc;
+    }, {});
+  }, [allocationStats, baseCurrency, fx]);
 
   const allocationMap = useMemo(() => {
     return allocationStats.reduce((acc, item) => {
@@ -349,16 +686,95 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
 
   const allocationPercentTotal = normalizedFinanceData.allocations.reduce((sum, item) => sum + (Number(item.percent) || 0), 0);
   const topExpenseCategory = expensesByCategory[0] || null;
+  const displayTopExpenseCategory = displayExpensesByCategory[0] || null;
+  const expenseCategories = useMemo(() => normalizedFinanceData.categories.filter((item) => item.kind === "expense"), [normalizedFinanceData.categories]);
   const kindOptions = normalizedFinanceData.categories.filter((item) => item.kind === transactionForm.kind);
   const monthLabel = useMemo(() => new Date(`${selectedMonth}-01T00:00:00`).toLocaleDateString("pt-PT", { month: "long", year: "numeric" }), [selectedMonth]);
+  const transactionFilterCategories = useMemo(() => {
+    if (transactionFilters.kind === "all") return normalizedFinanceData.categories;
+    return normalizedFinanceData.categories.filter((item) => item.kind === transactionFilters.kind);
+  }, [normalizedFinanceData.categories, transactionFilters.kind]);
+  const filteredMonthTransactions = useMemo(() => {
+    const searchTerm = transactionFilters.search.trim().toLowerCase();
+
+    return monthTransactions.filter((item) => {
+      if (transactionFilters.kind !== "all" && item.kind !== transactionFilters.kind) return false;
+      if (transactionFilters.categoryId !== "all" && item.categoryId !== transactionFilters.categoryId) return false;
+      if (transactionFilters.source !== "all" && item.source !== transactionFilters.source) return false;
+      if (!searchTerm) return true;
+
+      const categoryName = categoriesById[item.categoryId]?.name || "";
+      const accountName = accountNameById[item.accountId] || "";
+      const noteText = item.notes || "";
+
+      return [item.description, categoryName, accountName, noteText]
+        .join(" ")
+        .toLowerCase()
+        .includes(searchTerm);
+    });
+  }, [monthTransactions, transactionFilters, categoriesById, accountNameById]);
+  const transactionsPerPage = isCompact ? 6 : 8;
+  const transactionPageCount = Math.max(1, Math.ceil(filteredMonthTransactions.length / transactionsPerPage));
+  const currentTransactionsPage = clampPage(transactionsPage, transactionPageCount);
+  const paginatedMonthTransactions = useMemo(() => {
+    const start = (currentTransactionsPage - 1) * transactionsPerPage;
+    return filteredMonthTransactions.slice(start, start + transactionsPerPage);
+  }, [filteredMonthTransactions, currentTransactionsPage, transactionsPerPage]);
+
+  const comparisonChartData = useMemo(() => {
+    const months = [];
+    for (let index = comparisonMonths - 1; index >= 0; index -= 1) {
+      const month = shiftMonth(selectedMonth, -index);
+      const [year, mon] = month.split("-");
+      const label = new Date(`${month}-01T00:00:00`).toLocaleDateString("pt-PT", { month: "short" }).replace(".", "") + `/${String(year).slice(2)}`;
+
+      const value = normalizedFinanceData.transactions
+        .filter((item) => {
+          if (monthKeyFromDate(item.date) !== month) return false;
+          if (selectedAccountId !== "all" && String(item.accountId) !== String(selectedAccountId)) return false;
+          if (item.kind !== "expense") return false;
+          if (comparisonCategoryId !== "all" && item.categoryId !== comparisonCategoryId) return false;
+          return true;
+        })
+        .reduce((sum, item) => sum + item.amount, 0);
+
+      months.push({ key: `${year}-${mon}`, label, value: convertFromChf(value) });
+    }
+
+    return months;
+  }, [comparisonMonths, selectedMonth, normalizedFinanceData.transactions, selectedAccountId, comparisonCategoryId, baseCurrency, fx]);
+
+  const comparisonCategoryLabel = comparisonCategoryId === "all"
+    ? "Todas as categorias (despesas)"
+    : expenseCategories.find((item) => item.id === comparisonCategoryId)?.name || "Categoria";
+
+  useEffect(() => {
+    setTransactionsPage(1);
+  }, [selectedMonth, selectedAccountId, transactionFilters, isCompact]);
+
+  useEffect(() => {
+    if (transactionsPage !== currentTransactionsPage) {
+      setTransactionsPage(currentTransactionsPage);
+    }
+  }, [transactionsPage, currentTransactionsPage]);
 
   const persistFinance = (updater) => {
     saveFinanceData((prev) => normalizeFinanceData(typeof updater === "function" ? updater(normalizeFinanceData(prev || createDefaultFinanceData())) : updater));
   };
 
+  const closeTransactionModal = () => {
+    setShowTransactionModal(false);
+  };
+
+  const closeImportModal = () => {
+    setShowImportModal(false);
+    setUploadError("");
+  };
+
   const saveTransaction = () => {
-    const amount = normalizeAmount(transactionForm.amount);
-    if (!transactionForm.accountId || !transactionForm.date || !transactionForm.description.trim() || !amount || !transactionForm.categoryId) return;
+    const enteredAmount = normalizeAmount(transactionForm.amount);
+    const amountInChf = toChf(enteredAmount, transactionForm.currency || "CHF", fx) ?? enteredAmount;
+    if (!transactionForm.accountId || !transactionForm.date || !transactionForm.description.trim() || !enteredAmount || !transactionForm.categoryId) return;
 
     persistFinance((prev) => ({
       ...prev,
@@ -368,10 +784,12 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
           accountId: String(transactionForm.accountId),
           date: transactionForm.date,
           description: transactionForm.description.trim(),
-          amount,
+          amount: amountInChf,
           kind: transactionForm.kind,
           categoryId: transactionForm.categoryId,
           notes: transactionForm.notes.trim(),
+          originalAmount: enteredAmount,
+          originalCurrency: transactionForm.currency || "CHF",
           source: "manual",
           createdAt: new Date().toISOString(),
         },
@@ -379,7 +797,8 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
       ],
     }));
 
-    setTransactionForm((prev) => ({ ...prev, date: currentDateValue(), description: "", amount: "", notes: "" }));
+    setTransactionForm((prev) => ({ ...prev, date: currentDateValue(), description: "", amount: "", currency: baseCurrency, notes: "" }));
+    setShowTransactionModal(false);
   };
 
   const startInlineEdit = (transaction) => {
@@ -435,7 +854,17 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
   };
 
   const deleteTransaction = (id) => {
-    persistFinance((prev) => ({ ...prev, transactions: prev.transactions.filter((item) => item.id !== id) }));
+    setDeleteTransactionId(id);
+  };
+
+  const confirmDeleteTransaction = () => {
+    if (deleteTransactionId === null) return;
+    persistFinance((prev) => ({ ...prev, transactions: prev.transactions.filter((item) => item.id !== deleteTransactionId) }));
+    setDeleteTransactionId(null);
+  };
+
+  const cancelDeleteTransaction = () => {
+    setDeleteTransactionId(null);
   };
 
   const addCategory = () => {
@@ -472,18 +901,56 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
     }));
   };
 
-  const updateAllocation = (allocationId, nextAllocation) => {
-    persistFinance((prev) => ({
-      ...prev,
-      allocations: prev.allocations.map((item) => item.id === allocationId ? nextAllocation : item),
-    }));
+  const openCreateAllocationEditor = () => {
+    setAllocationEditorState({
+      open: true,
+      mode: "create",
+      allocationId: null,
+      draft: { name: "", percent: 0, categoryIds: [] },
+    });
   };
 
-  const addAllocation = () => {
-    persistFinance((prev) => ({
-      ...prev,
-      allocations: [...prev.allocations, { id: `alloc-${Date.now()}`, name: "Nova alocação", percent: 0, categoryIds: [] }],
-    }));
+  const openEditAllocationEditor = (allocation) => {
+    setAllocationEditorState({
+      open: true,
+      mode: "edit",
+      allocationId: allocation.id,
+      draft: {
+        name: allocation.name || "",
+        percent: Number(allocation.percent) || 0,
+        categoryIds: Array.isArray(allocation.categoryIds) ? allocation.categoryIds : [],
+      },
+    });
+  };
+
+  const closeAllocationEditor = () => {
+    setAllocationEditorState((prev) => ({ ...prev, open: false }));
+  };
+
+  const saveAllocationEditor = () => {
+    const name = String(allocationEditorState.draft.name || "").trim();
+    if (!name) return;
+
+    const percent = Number(allocationEditorState.draft.percent) || 0;
+    const categoryIds = Array.isArray(allocationEditorState.draft.categoryIds)
+      ? allocationEditorState.draft.categoryIds
+      : [];
+
+    if (allocationEditorState.mode === "create") {
+      persistFinance((prev) => ({
+        ...prev,
+        allocations: [...prev.allocations, { id: `alloc-${Date.now()}`, name, percent, categoryIds }],
+      }));
+    } else {
+      persistFinance((prev) => ({
+        ...prev,
+        allocations: prev.allocations.map((item) => item.id === allocationEditorState.allocationId
+          ? { ...item, name, percent, categoryIds }
+          : item),
+      }));
+    }
+
+    closeAllocationEditor();
   };
 
   const removeAllocation = (allocationId) => {
@@ -588,6 +1055,7 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
       setUploadResult({ imported: uniqueImportedTransactions.length, skipped: importedTransactions.length - uniqueImportedTransactions.length, preview: uniqueImportedTransactions.slice(0, 6) });
       setUploadFiles([]);
       if (fileInputRef.current) fileInputRef.current.value = "";
+      setShowImportModal(false);
     } catch (error) {
       setUploadError(error.message || "Falha ao importar extrato.");
     } finally {
@@ -597,28 +1065,35 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
 
   return (
     <div style={{ paddingBottom: 40 }}>
-      <div style={{ ...card({ padding: isCompact ? "16px 14px" : "20px 22px", marginBottom: 20, overflow: "hidden" }) }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: isCompact ? "stretch" : "center", marginBottom: 16, gap: 12, flexWrap: "wrap", flexDirection: isCompact ? "column" : "row" }}>
-          <div>
-            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: isCompact ? 24 : 22, color: T }}>Finanças Mensais</h2>
-            <p style={{ fontSize: 13, color: T3, marginTop: 6 }}>Micro gestão de despesas, alocações mensais e importação automática de extratos.</p>
-          </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 22, color: T }}>Finanças</h2>
+        <select
+          value={baseCurrency}
+          onChange={(e) => onUpdateBaseCurrency?.(e.target.value)}
+          style={{ ...inp, width: "auto", padding: "4px 8px", fontSize: 12, background: S2, border: "1px solid " + BD2 }}>
+          <option value="CHF">CHF</option>
+          <option value="EUR">EUR</option>
+          <option value="USD">USD</option>
+        </select>
+      </div>
+
+      <div style={{ ...card({ padding: isCompact ? "12px" : "14px 16px", marginBottom: 20, overflow: "hidden" }) }}>
+        <div style={{ marginBottom: 10, background: S2, border: "1px solid " + BD, borderRadius: 12, padding: 4 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 4 }}>
             {FINANCE_TABS.map((tab) => <TabButton key={tab.key} active={activeTab === tab.key} label={tab.label} onClick={() => setActiveTab(tab.key)} />)}
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: isCompact ? "1fr" : "auto minmax(160px,180px) minmax(220px,280px)", gap: 10, alignItems: "center" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "44px minmax(0,1fr) 44px", gap: 8, alignItems: "center" }}>
-            <button onClick={() => setSelectedMonth((prev) => shiftMonth(prev, -1))} style={bsm({ padding: "10px 0" })}>←</button>
-            <div style={{ background: S2, border: "1px solid " + BD2, borderRadius: 14, padding: "10px 12px", textAlign: "center" }}>
-              <p style={{ fontSize: 11, color: T3, marginBottom: 4 }}>Mês ativo</p>
-              <p style={{ fontSize: 14, color: T, fontWeight: 600, textTransform: "capitalize" }}>{monthLabel}</p>
+        <div style={{ display: "grid", gridTemplateColumns: isCompact ? "1fr" : "auto minmax(150px,170px) minmax(200px,240px)", gap: 8, alignItems: "center" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "34px minmax(0,1fr) 34px", gap: 6, alignItems: "center" }}>
+            <button onClick={() => setSelectedMonth((prev) => shiftMonth(prev, -1))} style={bsm({ padding: "7px 0", fontSize: 12, color: T2, borderColor: BD2 })}>←</button>
+            <div style={{ background: S2, border: "1px solid " + BD, borderRadius: 10, padding: "8px 10px", textAlign: "center" }}>
+              <p style={{ fontSize: 12, color: T2, fontWeight: 600, textTransform: "capitalize" }}>{monthLabel}</p>
             </div>
-            <button onClick={() => setSelectedMonth((prev) => shiftMonth(prev, 1))} style={bsm({ padding: "10px 0" })}>→</button>
+            <button onClick={() => setSelectedMonth((prev) => shiftMonth(prev, 1))} style={bsm({ padding: "7px 0", fontSize: 12, color: T2, borderColor: BD2 })}>→</button>
           </div>
-          <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} style={{ ...inp, width: "100%" }} />
-          <select value={selectedAccountId} onChange={(e) => setSelectedAccountId(e.target.value)} style={{ ...inp, width: "100%" }}>
+          <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} style={{ ...inp, width: "100%", padding: "8px 10px", fontSize: 12, border: "1px solid " + BD, background: S2 }} />
+          <select value={selectedAccountId} onChange={(e) => setSelectedAccountId(e.target.value)} style={{ ...inp, width: "100%", padding: "8px 10px", fontSize: 12, border: "1px solid " + BD, background: S2 }}>
             <option value="all">Todas as contas</option>
             {bankAccounts.map((item) => <option key={item.id} value={String(item.id)}>{item.name}</option>)}
           </select>
@@ -635,28 +1110,72 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
       {activeTab === "overview" && (
         <>
           <div style={{ display: "grid", gridTemplateColumns: isCompact ? "repeat(2,minmax(0,1fr))" : "repeat(auto-fit,minmax(180px,1fr))", gap: 12, marginBottom: 20 }}>
-            <FinanceStat label="Entradas do mês" value={`CHF ${fmtF(totals.income)}`} note="Total de rendimentos registados" color={GR} compact={isCompact} />
-            <FinanceStat label="Saídas do mês" value={`CHF ${fmtF(totals.expense)}`} note="Total de despesas registadas" color={RD} compact={isCompact} />
-            <FinanceStat label="Saldo mensal" value={`CHF ${fmtF(totals.income - totals.expense)}`} note={selectedAccountId === "all" ? "Todas as contas" : accountNameById[selectedAccountId]} color={totals.income - totals.expense >= 0 ? G : RD} compact={isCompact} />
-            <FinanceStat label="Categoria mais pesada" value={topExpenseCategory ? topExpenseCategory.name : "—"} note={topExpenseCategory ? `CHF ${fmtF(topExpenseCategory.amount)}` : "Sem despesas"} color={topExpenseCategory?.color || T} compact={isCompact} />
+            <FinanceStat label="Entradas" value={`${baseCurrency} ${fmtF(displayTotals.income)}`} color={GR} compact={isCompact} />
+            <FinanceStat label="Saídas" value={`${baseCurrency} ${fmtF(displayTotals.expense)}`} color={RD} compact={isCompact} />
+            <FinanceStat label="Saldo" value={`${baseCurrency} ${fmtF(displayTotals.income - displayTotals.expense)}`} note={selectedAccountId === "all" ? "Todas as contas" : accountNameById[selectedAccountId]} color={displayTotals.income - displayTotals.expense >= 0 ? G : RD} compact={isCompact} />
+            <FinanceStat label="Top categoria" value={topExpenseCategory ? topExpenseCategory.name : "—"} note={displayTopExpenseCategory ? `${baseCurrency} ${fmtF(displayTopExpenseCategory.amount)}` : "Sem dados"} color={topExpenseCategory?.color || T} compact={isCompact} />
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: isCompact ? "1fr" : "minmax(0,1fr) minmax(300px,.9fr)", gap: 16, alignItems: "start", marginBottom: 20 }}>
-            <div style={card()}>
+          <div style={{ ...card({ marginBottom: 20, padding: isCompact ? "12px" : "14px" }) }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+              <div>
+                <p style={{ fontSize: 12, color: T2, fontWeight: 700, letterSpacing: 1 }}>VER</p>
+              </div>
+              <span style={{ fontSize: 11, color: T3 }}>{monthLabel}</span>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {OVERVIEW_SECTIONS.map((section) => (
+                <SectionToggleButton
+                  key={section.key}
+                  active={activeOverviewSection === section.key}
+                  label={section.label}
+                  onClick={() => setActiveOverviewSection(section.key)}
+                />
+              ))}
+            </div>
+          </div>
+
+          {activeOverviewSection === "comparison" && (
+            <div style={{ ...card({ marginBottom: 20, padding: isCompact ? "14px 12px" : "16px 16px" }) }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: isCompact ? "stretch" : "center", gap: 10, marginBottom: 12, flexWrap: "wrap", flexDirection: isCompact ? "column" : "row" }}>
+                <div>
+                  <p style={{ fontSize: 12, color: T2, fontWeight: 700, letterSpacing: 1 }}>COMPARAÇÃO MENSAL</p>
+                  <p style={{ fontSize: 12, color: T3, marginTop: 4 }}>Evolução das despesas.</p>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: isCompact ? "1fr" : "120px 220px", gap: 8, width: isCompact ? "100%" : "auto" }}>
+                  <select style={{ ...inp, padding: "8px 10px", fontSize: 12, border: "1px solid " + BD, background: S2 }} value={String(comparisonMonths)} onChange={(e) => setComparisonMonths(Number(e.target.value) || 6)}>
+                    <option value="3">Últimos 3 meses</option>
+                    <option value="6">Últimos 6 meses</option>
+                    <option value="12">Últimos 12 meses</option>
+                  </select>
+                  <select style={{ ...inp, padding: "8px 10px", fontSize: 12, border: "1px solid " + BD, background: S2 }} value={comparisonCategoryId} onChange={(e) => setComparisonCategoryId(e.target.value)}>
+                    <option value="all">Todas as categorias</option>
+                    {expenseCategories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              <MonthlyComparisonChart rows={comparisonChartData} categoryLabel={comparisonCategoryLabel} compact={isCompact} currencyLabel={baseCurrency} />
+            </div>
+          )}
+
+          {activeOverviewSection === "breakdown" && (
+            <div style={{ ...card({ marginBottom: 20 }) }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, gap: 12 }}>
                 <div>
                   <p style={{ fontSize: 12, color: T2, fontWeight: 700, letterSpacing: 1 }}>ONDE GASTASTE MAIS</p>
-                  <p style={{ fontSize: 12, color: T3, marginTop: 4 }}>Distribuição de despesas no mês filtrado.</p>
+                  <p style={{ fontSize: 12, color: T3, marginTop: 4 }}>Distribuição por categoria.</p>
                 </div>
                 <span style={{ fontSize: 11, color: T3 }}>{expensesByCategory.length} categoria(s)</span>
               </div>
-              <ExpenseBreakdown rows={expensesByCategory} totalExpenses={totals.expense} />
+              <ExpenseBreakdown rows={displayExpensesByCategory} totalExpenses={displayTotals.expense} currencyLabel={baseCurrency} />
             </div>
+          )}
 
-            <div style={card()}>
+          {activeOverviewSection === "summary" && (
+            <div style={{ ...card({ marginBottom: 20 }) }}>
               <div style={{ marginBottom: 14 }}>
                 <p style={{ fontSize: 12, color: T2, fontWeight: 700, letterSpacing: 1 }}>RESUMO RÁPIDO</p>
-                <p style={{ fontSize: 12, color: T3, marginTop: 4 }}>Leitura imediata do mês e da conta selecionada.</p>
+                <p style={{ fontSize: 12, color: T3, marginTop: 4 }}>Visão rápida do mês.</p>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 <div style={{ padding: "12px 14px", borderRadius: 14, background: S2, border: "1px solid " + BD }}>
@@ -675,106 +1194,80 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
                 </div>
               </div>
             </div>
-          </div>
+          )}
         </>
       )}
 
       {activeTab === "transactions" && (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: isCompact ? "1fr" : "minmax(0,1.1fr) minmax(320px,.9fr)", gap: 16, alignItems: "start", marginBottom: 20 }}>
-            <div style={card()}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 12, flexWrap: "wrap" }}>
-                <div>
-                  <p style={{ fontSize: 12, color: T2, fontWeight: 700, letterSpacing: 1 }}>NOVA TRANSAÇÃO</p>
-                  <p style={{ fontSize: 12, color: T3, marginTop: 4 }}>Regista manualmente os movimentos do mês.</p>
-                </div>
-                <div style={{ display: "flex", gap: 6, width: isCompact ? "100%" : "auto" }}>
-                  {[{ key: "expense", label: "Despesa", color: RD }, { key: "income", label: "Entrada", color: GR }].map((option) => (
-                    <button key={option.key} onClick={() => setTransactionForm((prev) => ({ ...prev, kind: option.key }))} style={{ ...bsm({ padding: "9px 12px", flex: isCompact ? 1 : "unset" }), background: transactionForm.kind === option.key ? option.color : "transparent", color: transactionForm.kind === option.key ? "#111" : T2, border: "1px solid " + (transactionForm.kind === option.key ? option.color : BD2) }}>{option.label}</button>
-                  ))}
-                </div>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: isCompact ? "1fr" : "repeat(auto-fit,minmax(180px,1fr))", gap: 12 }}>
-                <div>
-                  <span style={lbl}>Conta *</span>
-                  <select style={inp} value={transactionForm.accountId} onChange={(e) => setTransactionForm((prev) => ({ ...prev, accountId: e.target.value }))}>
-                    <option value="">Selecionar conta</option>
-                    {bankAccounts.map((item) => <option key={item.id} value={String(item.id)}>{item.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <span style={lbl}>Data *</span>
-                  <input style={inp} type="date" value={transactionForm.date} onChange={(e) => setTransactionForm((prev) => ({ ...prev, date: e.target.value }))} />
-                </div>
-                <div>
-                  <span style={lbl}>Montante *</span>
-                  <input style={inp} type="number" step="0.01" placeholder="ex: 48.90" value={transactionForm.amount} onChange={(e) => setTransactionForm((prev) => ({ ...prev, amount: e.target.value }))} />
-                </div>
-                <div>
-                  <span style={lbl}>Tipo *</span>
-                  <select style={inp} value={transactionForm.categoryId} onChange={(e) => setTransactionForm((prev) => ({ ...prev, categoryId: e.target.value }))}>
-                    <option value="">Selecionar categoria</option>
-                    {kindOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ marginTop: 12 }}>
-                <span style={lbl}>Descrição *</span>
-                <input style={inp} placeholder="ex: Passe mensal, salário, eletricidade" value={transactionForm.description} onChange={(e) => setTransactionForm((prev) => ({ ...prev, description: e.target.value }))} />
-              </div>
-              <div style={{ marginTop: 12 }}>
-                <span style={lbl}>Notas</span>
-                <textarea style={{ ...inp, minHeight: 70, resize: "vertical" }} value={transactionForm.notes} onChange={(e) => setTransactionForm((prev) => ({ ...prev, notes: e.target.value }))} placeholder="Observações opcionais" />
-              </div>
-              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14, gap: 8, flexWrap: "wrap" }}>
-                <button style={{ ...btnG, width: isCompact ? "100%" : "auto" }} onClick={saveTransaction}>Adicionar transação</button>
-              </div>
-            </div>
-
-            <div style={card()}>
-              <div style={{ marginBottom: 16 }}>
-                <p style={{ fontSize: 12, color: T2, fontWeight: 700, letterSpacing: 1 }}>IMPORTAR EXTRATO</p>
-                <p style={{ fontSize: 12, color: T3, marginTop: 4 }}>Envia imagens do extrato bancário para extrair automaticamente as transações do mês.</p>
-              </div>
-              <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={(e) => setUploadFiles(Array.from(e.target.files || []))} style={{ ...inp, padding: 10 }} />
-              {uploadFiles.length > 0 && <p style={{ fontSize: 12, color: T2, marginTop: 10 }}>{uploadFiles.length} ficheiro(s) preparado(s) para importação.</p>}
-              {uploadError && <p style={{ fontSize: 12, color: RD, marginTop: 10 }}>{uploadError}</p>}
-              {uploadResult && (
-                <div style={{ marginTop: 12, padding: "12px 14px", borderRadius: 12, background: S2, border: "1px solid " + BD }}>
-                  <p style={{ fontSize: 13, color: T, marginBottom: 6 }}>{uploadResult.imported} transações importadas</p>
-                  {uploadResult.skipped > 0 && <p style={{ fontSize: 11, color: T3, marginBottom: 8 }}>{uploadResult.skipped} movimento(s) ignorado(s) por já existirem.</p>}
-                  {uploadResult.preview?.length > 0 && uploadResult.preview.map((item) => (
-                    <div key={item.id} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 11, color: T2, paddingTop: 6 }}>
-                      <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{item.date} · {item.description}</span>
-                      <span>{item.kind === "income" ? "+" : "-"}CHF {fmtF(item.amount)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
-                <button style={{ ...btnG, width: isCompact ? "100%" : "auto", opacity: uploading || !uploadFiles.length ? 0.55 : 1 }} onClick={importStatement} disabled={uploading || !uploadFiles.length}>{uploading ? "A ler extrato..." : "Importar via AI"}</button>
-              </div>
-            </div>
-          </div>
-
           <div style={card()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 12, flexWrap: "wrap" }}>
               <div>
                 <p style={{ fontSize: 12, color: T2, fontWeight: 700, letterSpacing: 1 }}>MOVIMENTOS DO MÊS</p>
-                <p style={{ fontSize: 12, color: T3, marginTop: 4 }}>{monthTransactions.length} movimento(s) encontrados no filtro actual.</p>
+                <p style={{ fontSize: 12, color: T3, marginTop: 4 }}>
+                  {isCompact
+                    ? `${monthTransactions.length} movimento(s) no total do mês.`
+                    : `${filteredMonthTransactions.length} movimento(s) após filtros${filteredMonthTransactions.length !== monthTransactions.length ? ` · ${monthTransactions.length} no total do mês` : ""}.`}
+                </p>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", width: isCompact ? "100%" : "auto" }}>
+                <button title="Upload de extrato" aria-label="Upload de extrato" style={{ ...bsm({ padding: "10px 12px", flex: isCompact ? 1 : "unset", color: BL, borderColor: BL + "30" }) }} onClick={() => setShowImportModal(true)}>
+                  ⤴
+                </button>
+                <button title="Nova transação" aria-label="Nova transação" style={{ ...btnG, padding: "10px 14px", width: isCompact ? "100%" : "auto", flex: isCompact ? 1 : "unset" }} onClick={() => setShowTransactionModal(true)}>
+                  +
+                </button>
               </div>
             </div>
 
-            {monthTransactions.length === 0 ? (
-              <p style={{ color: T3, fontSize: 13 }}>Ainda não existem movimentos registados para este mês.</p>
+            {!isCompact && (
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(220px,1.2fr) repeat(3,minmax(150px,1fr)) auto", gap: 10, marginBottom: 16, alignItems: "end" }}>
+                <div>
+                  <span style={lbl}>Pesquisar</span>
+                  <input
+                    style={inp}
+                    value={transactionFilters.search}
+                    onChange={(e) => setTransactionFilters((prev) => ({ ...prev, search: e.target.value }))}
+                    placeholder="Descrição, conta, categoria ou nota"
+                  />
+                </div>
+                <div>
+                  <span style={lbl}>Tipo</span>
+                  <select style={inp} value={transactionFilters.kind} onChange={(e) => setTransactionFilters((prev) => ({ ...prev, kind: e.target.value, categoryId: "all" }))}>
+                    <option value="all">Todos</option>
+                    <option value="expense">Despesas</option>
+                    <option value="income">Entradas</option>
+                  </select>
+                </div>
+                <div>
+                  <span style={lbl}>Categoria</span>
+                  <select style={inp} value={transactionFilters.categoryId} onChange={(e) => setTransactionFilters((prev) => ({ ...prev, categoryId: e.target.value }))}>
+                    <option value="all">Todas</option>
+                    {transactionFilterCategories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <span style={lbl}>Origem</span>
+                  <select style={inp} value={transactionFilters.source} onChange={(e) => setTransactionFilters((prev) => ({ ...prev, source: e.target.value }))}>
+                    {TRANSACTION_SOURCES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                  </select>
+                </div>
+                <button title="Limpar filtros" aria-label="Limpar filtros" style={{ ...bsm({ padding: "10px 12px" }) }} onClick={() => setTransactionFilters(DEFAULT_TRANSACTION_FILTERS)}>
+                  ⟲
+                </button>
+              </div>
+            )}
+
+            {filteredMonthTransactions.length === 0 ? (
+              <p style={{ color: T3, fontSize: 13 }}>{monthTransactions.length === 0 ? "Ainda não existem movimentos registados para este mês." : "Nenhum movimento corresponde aos filtros actuais."}</p>
             ) : isCompact ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {monthTransactions.map((item) => <TransactionCard key={item.id} item={item} category={categoriesById[item.categoryId]} accountName={accountNameById[item.accountId]} categories={normalizedFinanceData.categories} bankAccounts={bankAccounts} isEditing={editingTransactionId === item.id} draft={editingDraft} onEdit={() => startInlineEdit(item)} onDraftChange={onInlineDraftChange} onSaveEdit={saveInlineEdit} onCancelEdit={cancelInlineEdit} onDelete={() => deleteTransaction(item.id)} />)}
+                {paginatedMonthTransactions.map((item) => <TransactionCard key={item.id} item={{ ...item, amount: convertFromChf(item.amount) }} category={categoriesById[item.categoryId]} accountName={accountNameById[item.accountId]} categories={normalizedFinanceData.categories} bankAccounts={bankAccounts} isEditing={editingTransactionId === item.id} draft={editingDraft} onEdit={() => startInlineEdit(item)} onDraftChange={onInlineDraftChange} onSaveEdit={saveInlineEdit} onCancelEdit={cancelInlineEdit} onDelete={() => deleteTransaction(item.id)} currencyLabel={baseCurrency} />)}
+                <PaginationControls page={currentTransactionsPage} pageCount={transactionPageCount} onPageChange={setTransactionsPage} compact />
               </div>
             ) : (
-              <div style={{ overflowX: "auto" }}>
+              <>
+                <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
                   <thead>
                     <tr style={{ borderBottom: "1px solid " + BD }}>
@@ -784,7 +1277,7 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
                     </tr>
                   </thead>
                   <tbody>
-                    {monthTransactions.map((item) => {
+                    {paginatedMonthTransactions.map((item) => {
                       const category = categoriesById[item.categoryId];
                       const color = category?.color || T2;
                       const isEditingRow = editingTransactionId === item.id;
@@ -821,19 +1314,19 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
                           </td>
                           <td style={{ padding: "11px 8px", color: T3, fontSize: 11 }}>{item.source === "ai-import" ? "AI" : "Manual"}</td>
                           <td style={{ padding: "11px 8px", color: isEditingRow ? T : item.kind === "income" ? GR : RD, fontSize: 13, fontWeight: 700 }}>
-                            {isEditingRow ? <input style={inp} type="number" step="0.01" value={editingDraft.amount} onChange={(e) => onInlineDraftChange("amount", e.target.value)} /> : `${item.kind === "income" ? "+" : "-"}CHF ${fmtF(item.amount)}`}
+                            {isEditingRow ? <input style={inp} type="number" step="0.01" value={editingDraft.amount} onChange={(e) => onInlineDraftChange("amount", e.target.value)} /> : `${item.kind === "income" ? "+" : "-"}${baseCurrency} ${fmtF(convertFromChf(item.amount))}`}
                           </td>
                           <td style={{ padding: "11px 8px" }}>
                             <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
                               {isEditingRow ? (
                                 <>
-                                  <button onClick={saveInlineEdit} style={bsm({ color: G, borderColor: G + "30" })}>Guardar</button>
-                                  <button onClick={cancelInlineEdit} style={bsm({ color: T2, borderColor: BD2 })}>Cancelar</button>
+                                  <button title="Guardar" aria-label="Guardar" onClick={saveInlineEdit} style={bsm({ color: G, borderColor: G + "30" })}>✓</button>
+                                  <button title="Cancelar" aria-label="Cancelar" onClick={cancelInlineEdit} style={bsm({ color: T2, borderColor: BD2 })}>↩</button>
                                 </>
                               ) : (
                                 <>
-                                  <button onClick={() => startInlineEdit(item)} style={bsm({ color: BL, borderColor: BL + "30" })}>Editar</button>
-                                  <button onClick={() => deleteTransaction(item.id)} style={bsm({ color: RD, borderColor: RD + "30" })}>×</button>
+                                  <button title="Editar" aria-label="Editar" onClick={() => startInlineEdit(item)} style={bsm({ color: BL, borderColor: BL + "30" })}>✎</button>
+                                  <button title="Eliminar" aria-label="Eliminar" onClick={() => deleteTransaction(item.id)} style={bsm({ color: RD, borderColor: RD + "30" })}>🗑</button>
                                 </>
                               )}
                             </div>
@@ -843,16 +1336,61 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
                     })}
                   </tbody>
                 </table>
-              </div>
+                </div>
+                <PaginationControls page={currentTransactionsPage} pageCount={transactionPageCount} onPageChange={setTransactionsPage} />
+              </>
             )}
           </div>
+
+          {showTransactionModal && <TransactionFormModal isCompact={isCompact} transactionForm={transactionForm} setTransactionForm={setTransactionForm} kindOptions={kindOptions} bankAccounts={bankAccounts} onSave={saveTransaction} onClose={closeTransactionModal} />}
+          {showImportModal && <StatementImportModal isCompact={isCompact} fileInputRef={fileInputRef} uploadFiles={uploadFiles} setUploadFiles={setUploadFiles} uploadError={uploadError} uploadResult={uploadResult} uploading={uploading} onImport={importStatement} onClose={closeImportModal} currencyLabel={baseCurrency} />}
+          {deleteTransactionId !== null && <DeleteTransactionConfirmModal isCompact={isCompact} onCancel={cancelDeleteTransaction} onConfirm={confirmDeleteTransaction} />}
         </>
       )}
 
       {activeTab === "planning" && (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: isCompact ? "1fr" : "minmax(0,1fr) minmax(300px,.9fr)", gap: 16, alignItems: "start", marginBottom: 20 }}>
-            <div style={card()}>
+          <div style={{ ...card({ marginBottom: 16, padding: isCompact ? "12px" : "14px" }) }}>
+            <div style={{ display: "grid", gridTemplateColumns: isCompact ? "1fr" : "repeat(3,minmax(0,1fr))", gap: 8 }}>
+              {PLANNING_TABS.map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setPlanningTab(tab.key)}
+                  style={{
+                    ...bsm({ padding: "10px 12px", fontSize: 12 }),
+                    background: planningTab === tab.key ? G : "transparent",
+                    color: planningTab === tab.key ? "#111" : T2,
+                    border: "1px solid " + (planningTab === tab.key ? G : BD2),
+                    fontWeight: 700,
+                  }}>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {planningTab === "allocations" && (
+            <div style={{ ...card({ marginBottom: 20 }) }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 12, flexWrap: "wrap" }}>
+                <div>
+                  <p style={{ fontSize: 12, color: T2, fontWeight: 700, letterSpacing: 1 }}>ALOCAÇÕES MENSAIS</p>
+                  <p style={{ fontSize: 12, color: T3, marginTop: 4 }}>Define percentagens mensais e acompanha automaticamente a execução.</p>
+                </div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12, color: allocationPercentTotal === 100 ? GR : allocationPercentTotal > 100 ? RD : G }}>Total configurado: {allocationPercentTotal.toFixed(1)}%</span>
+                  <button title="Nova alocação" aria-label="Nova alocação" style={bsm({ color: G, borderColor: G + "30", minWidth: 34, padding: "6px 10px" })} onClick={openCreateAllocationEditor}>+</button>
+                </div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {normalizedFinanceData.allocations.map((allocation) => (
+                  <AllocationCard key={allocation.id} allocation={allocation} incomeTotal={displayTotals.income} actualAmount={displayAllocationMap[allocation.id] || 0} categoriesById={categoriesById} compact={isCompact} onEdit={() => openEditAllocationEditor(allocation)} onRemove={() => removeAllocation(allocation.id)} currencyLabel={baseCurrency} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {planningTab === "categories" && (
+            <div style={{ ...card({ marginBottom: 20 }) }}>
               <div style={{ marginBottom: 14 }}>
                 <p style={{ fontSize: 12, color: T2, fontWeight: 700, letterSpacing: 1 }}>CATEGORIAS</p>
                 <p style={{ fontSize: 12, color: T3, marginTop: 4 }}>Cria e gere os tipos de transação usados no mês.</p>
@@ -863,7 +1401,7 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
                   <option value="expense">Despesa</option>
                   <option value="income">Entrada</option>
                 </select>
-                <button style={bsm({ padding: "10px 12px", color: G, borderColor: G + "30" })} onClick={addCategory}>Criar</button>
+                <button title="Criar categoria" aria-label="Criar categoria" style={bsm({ padding: "10px 12px", color: G, borderColor: G + "30" })} onClick={addCategory}>+</button>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {normalizedFinanceData.categories.map((item) => (
@@ -876,16 +1414,18 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
                 ))}
               </div>
             </div>
+          )}
 
-            <div style={card()}>
+          {planningTab === "allocation-status" && (
+            <div style={{ ...card({ marginBottom: 20 }) }}>
               <div style={{ marginBottom: 14 }}>
                 <p style={{ fontSize: 12, color: T2, fontWeight: 700, letterSpacing: 1 }}>ESTADO DAS ALOCAÇÕES</p>
                 <p style={{ fontSize: 12, color: T3, marginTop: 4 }}>Quanto do plano mensal já foi consumido.</p>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {normalizedFinanceData.allocations.map((allocation) => {
-                  const amount = allocationMap[allocation.id] || 0;
-                  const target = totals.income * ((Number(allocation.percent) || 0) / 100);
+                  const amount = displayAllocationMap[allocation.id] || 0;
+                  const target = displayTotals.income * ((Number(allocation.percent) || 0) / 100);
                   return (
                     <div key={allocation.id} style={{ padding: "12px 14px", borderRadius: 14, background: S2, border: "1px solid " + BD }}>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
@@ -898,25 +1438,25 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
                 })}
               </div>
             </div>
-          </div>
+          )}
 
-          <div style={{ ...card({ marginBottom: 20 }) }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 12, flexWrap: "wrap" }}>
-              <div>
-                <p style={{ fontSize: 12, color: T2, fontWeight: 700, letterSpacing: 1 }}>ALOCAÇÕES MENSAIS</p>
-                <p style={{ fontSize: 12, color: T3, marginTop: 4 }}>Define percentagens mensais e acompanha automaticamente a execução.</p>
-              </div>
-              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                <span style={{ fontSize: 12, color: allocationPercentTotal === 100 ? GR : allocationPercentTotal > 100 ? RD : G }}>Total configurado: {allocationPercentTotal.toFixed(1)}%</span>
-                <button style={bsm({ color: G, borderColor: G + "30" })} onClick={addAllocation}>+ Alocação</button>
-              </div>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {normalizedFinanceData.allocations.map((allocation) => (
-                <AllocationCard key={allocation.id} allocation={allocation} incomeTotal={totals.income} actualAmount={allocationMap[allocation.id] || 0} categories={normalizedFinanceData.categories} compact={isCompact} onChange={(nextAllocation) => updateAllocation(allocation.id, nextAllocation)} onRemove={() => removeAllocation(allocation.id)} />
-              ))}
-            </div>
-          </div>
+          {allocationEditorState.open && (
+            <AllocationEditorModal
+              isCompact={isCompact}
+              title={allocationEditorState.mode === "create" ? "Nova Alocação" : "Editar Alocação"}
+              draft={allocationEditorState.draft}
+              categories={normalizedFinanceData.categories.filter((item) => item.kind === "expense")}
+              incomeTotal={displayTotals.income}
+              onChangeDraft={(updater) => setAllocationEditorState((prev) => ({
+                ...prev,
+                draft: typeof updater === "function" ? updater(prev.draft) : updater,
+              }))}
+              onCancel={closeAllocationEditor}
+              onSave={saveAllocationEditor}
+              savingLabel={allocationEditorState.mode === "create" ? "Criar alocação" : "Guardar alterações"}
+              currencyLabel={baseCurrency}
+            />
+          )}
         </>
       )}
     </div>

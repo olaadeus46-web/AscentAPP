@@ -67,7 +67,7 @@ export default function ObjetivosSection({ goals, saveGoals, onAddCalendarTask }
     <div style={{ paddingBottom: 40 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 22, color: T }}>Objetivos</h2>
-        <button style={btnG} onClick={() => { setForm(emp); setEdit(null); setShow(true); }}>+ Novo Objetivo</button>
+        <button title="Novo objetivo" aria-label="Novo objetivo" style={btnG} onClick={() => { setForm(emp); setEdit(null); setShow(true); }}>+</button>
       </div>
 
       {goals.length === 0 ? (
@@ -109,9 +109,9 @@ export default function ObjetivosSection({ goals, saveGoals, onAddCalendarTask }
 
                 <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
                   <input type="number" placeholder="Progresso actual" value={g.current || ""} onChange={(e) => saveGoals(goals.map((x) => (x.id === g.id ? { ...x, current: parseFloat(e.target.value) || 0 } : x)))} style={{ ...inp, width: 140, padding: "6px 10px", fontSize: 13 }} />
-                  <button onClick={() => { setForm({ ...g }); setEdit(g.id); setShow(true); }} style={bsm()}>Editar</button>
-                  <button onClick={() => loadAiSuggestions(g)} disabled={aiState.loading} style={{ ...bsm({ color: BL, borderColor: BL + "30" }), opacity: aiState.loading ? 0.65 : 1 }}>{aiState.loading ? "AI..." : "Sugestões AI"}</button>
-                  <button onClick={() => saveGoals(goals.filter((x) => x.id !== g.id))} style={bsm({ color: RD, borderColor: RD + "30" })}>×</button>
+                  <button title="Editar objetivo" aria-label="Editar objetivo" onClick={() => { setForm({ ...g }); setEdit(g.id); setShow(true); }} style={bsm()}>✎</button>
+                  <button title="Gerar sugestões AI" aria-label="Gerar sugestões AI" onClick={() => loadAiSuggestions(g)} disabled={aiState.loading} style={{ ...bsm({ color: BL, borderColor: BL + "30" }), opacity: aiState.loading ? 0.65 : 1 }}>{aiState.loading ? "⟳" : "✨"}</button>
+                  <button title="Eliminar objetivo" aria-label="Eliminar objetivo" onClick={() => saveGoals(goals.filter((x) => x.id !== g.id))} style={bsm({ color: RD, borderColor: RD + "30" })}>🗑</button>
                 </div>
 
                 {(aiState.error || suggestionHistory.length > 0) && (
@@ -123,8 +123,8 @@ export default function ObjetivosSection({ goals, saveGoals, onAddCalendarTask }
                         <p style={{ fontSize: 13, color: T, fontWeight: 600 }}>{suggestion.title}</p>
                         {suggestion.notes && <p style={{ fontSize: 12, color: T3, marginTop: 4, lineHeight: 1.5 }}>{suggestion.notes}</p>}
                         <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          <button onClick={() => onAddCalendarTask?.(g, suggestion)} style={bsm({ color: G, borderColor: G + "30", fontSize: 11, padding: "5px 10px" })}>+ Adicionar ao calendário</button>
-                          <button onClick={() => saveGoals(goals.map((x) => (x.id === g.id ? { ...x, aiSuggestions: (x.aiSuggestions || []).filter((s) => s.id !== suggestion.id) } : x)))} style={bsm({ color: RD, borderColor: RD + "30", fontSize: 11, padding: "5px 10px" })}>Apagar</button>
+                          <button title="Adicionar ao calendário" aria-label="Adicionar ao calendário" onClick={() => onAddCalendarTask?.(g, suggestion)} style={bsm({ color: G, borderColor: G + "30", fontSize: 11, padding: "5px 10px" })}>📅</button>
+                          <button title="Apagar sugestão" aria-label="Apagar sugestão" onClick={() => saveGoals(goals.map((x) => (x.id === g.id ? { ...x, aiSuggestions: (x.aiSuggestions || []).filter((s) => s.id !== suggestion.id) } : x)))} style={bsm({ color: RD, borderColor: RD + "30", fontSize: 11, padding: "5px 10px" })}>🗑</button>
                         </div>
                       </div>
                     ))}
@@ -151,8 +151,8 @@ export default function ObjetivosSection({ goals, saveGoals, onAddCalendarTask }
             <div><span style={lbl}>Prazo</span><input style={inp} type="date" value={form.deadline} onChange={(e) => setForm((f) => ({ ...f, deadline: e.target.value }))} /></div>
             <div><span style={lbl}>Notas</span><input style={inp} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} /></div>
             <div style={{ display: "flex", gap: 10 }}>
-              <button style={{ ...btn({ flex: 1 }) }} onClick={() => { setShow(false); setEdit(null); }}>Cancelar</button>
-              <button style={{ ...btnG, flex: 1 }} onClick={save}>Guardar</button>
+              <button title="Cancelar" aria-label="Cancelar" style={{ ...btn({ flex: 1 }) }} onClick={() => { setShow(false); setEdit(null); }}>×</button>
+              <button title="Guardar" aria-label="Guardar" style={{ ...btnG, flex: 1 }} onClick={save}>✓</button>
             </div>
           </div>
         </Modal>

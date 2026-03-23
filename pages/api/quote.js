@@ -1,7 +1,4 @@
-import yahooFinance from "yahoo-finance2";
 import { requireAuth } from "../../lib/auth";
-
-const yf = new yahooFinance();
 
 function parseStooqCsv(csv) {
   // stooq returns a simple CSV with a header row.
@@ -100,49 +97,19 @@ export default async function handler(req, res) {
   if (list.length === 0) return res.status(200).json({ quotes: {} });
 
   try {
-    const fields = [
-      "regularMarketPrice",
-      "regularMarketChange",
-      "regularMarketChangePercent",
-      "currency",
-      "shortName",
-      "longName",
-      "regularMarketPreviousClose",
-    ];
-
-    // yahoo-finance2 quoteCombine works for both single and batch
-    const raw = await yf.quote(list, { fields });
-
-    // Normalise: always array
-    const items = Array.isArray(raw) ? raw : [raw];
-
     const quotes = {};
-    for (const item of items) {
-      if (!item || !item.symbol) continue;
-      const price = item.regularMarketPrice;
-      if (!price || price <= 0) continue;
-
-      quotes[item.symbol] = {
-        price,
-        change:     item.regularMarketChange    ?? 0,
-        changePct:  item.regularMarketChangePercent ?? 0,
-        currency:   item.currency ?? "USD",
-        name:       item.shortName || item.longName || item.symbol,
-      };
-    }
-
-    // Fallback: if we couldn't fetch any prices from Yahoo, try Stooq (more stable).
-    if (Object.keys(quotes).length === 0) {
-      const stooqQuotes = await queryStooq(list);
-      Object.assign(quotes, stooqQuotes);
-    }
-
-    // If still missing some symbols, try Yahoo chart endpoint (public).
     for (const symbol of list) {
-      if (!quotes[symbol]) {
-        const yahooData = await queryYahooChart(symbol);
-        if (yahooData) {
-          quotes[symbol] = yahooData;
+      const yahooData = await queryYahooChart(symbol);
+      if (yahooData) {
+        quotes[symbol] = yahooData;
+      }
+    }
+
+    if (Object.keys(quotes).length < list.length) {
+      const stooqQuotes = await queryStooq(list);
+      for (const symbol of list) {
+        if (!quotes[symbol] && stooqQuotes[symbol]) {
+          quotes[symbol] = stooqQuotes[symbol];
         }
       }
     }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   TARGET,
   G,
@@ -46,6 +46,12 @@ import {
   NwChart,
 } from "./shared";
 import { getMonthlyAccountBalances } from "../../lib/finance";
+
+const PATRIMONIO_SECTIONS = [
+  { key: "overview", label: "Resumo" },
+  { key: "portfolios", label: "Carteiras" },
+  { key: "milestones", label: "Marcos" },
+];
 
 function AddAssetModal({ onClose, onSave }) {
   const TABS = ["Pesquisar", "Ticker Manual", "Fiat / Dinheiro"];
@@ -147,7 +153,7 @@ function AddAssetModal({ onClose, onSave }) {
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.82)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: S1, border: "1px solid " + BD2, borderRadius: 18, width: "100%", maxWidth: 540, maxHeight: "92vh", overflowY: "auto" }}>
+      <div style={{ background: S1, border: "1px solid " + BD2, borderRadius: 18, width: "100%", maxWidth: 540, maxHeight: "92vh", overflowY: "auto", display: "flex", flexDirection: "column" }}>
         <div style={{ padding: "20px 24px 0", borderBottom: "1px solid " + BD }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
             <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 17, color: T }}>Adicionar Ativo</span>
@@ -162,7 +168,7 @@ function AddAssetModal({ onClose, onSave }) {
           )}
         </div>
 
-        <div style={{ padding: "18px 24px 22px", display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ padding: "18px 24px 22px", display: "flex", flexDirection: "column", gap: 14, flex: 1, minHeight: step === "pick" && tab === 0 ? 420 : undefined }}>
           {step === "pick" && tab === 0 && (
             <>
               <div style={{ position: "relative" }}>
@@ -326,8 +332,14 @@ function AddAssetModal({ onClose, onSave }) {
   );
 }
 
-function PortfolioCard({ pf, prices, fx, loading, onAddAsset, onDeleteAsset, onDelete, baseCurrency, monthlyBalanceChf = 0, financeMonthLabel = "" }) {
+function PortfolioCard({ pf, prices, fx, loading, onAddAsset, onDeleteAsset, onSwapAsset, onDelete, baseCurrency, monthlyBalanceChf = 0, financeMonthLabel = "" }) {
   const [open, setOpen] = useState(true);
+  const [swapAssetId, setSwapAssetId] = useState(null);
+  const [swapQuery, setSwapQuery] = useState("");
+  const [swapResults, setSwapResults] = useState([]);
+  const [swapSearching, setSwapSearching] = useState(false);
+  const [swapNoRes, setSwapNoRes] = useState(false);
+  const swapTimer = useRef(null);
   const pt = PORTFOLIO_TYPES.find((t) => t.key === pf.type) || PORTFOLIO_TYPES[5];
   const color = pf.color || G;
   const totalChf = pfValChf(pf, prices, fx);
@@ -336,6 +348,41 @@ function PortfolioCard({ pf, prices, fx, loading, onAddAsset, onDeleteAsset, onD
   const cost = toBaseCurrency(costChf, baseCurrency, fx);
   const pnl = total - cost;
   const pnlPct = cost > 0 ? (pnl / cost) * 100 : 0;
+
+  useEffect(() => {
+    clearTimeout(swapTimer.current);
+    setSwapNoRes(false);
+
+    if (swapAssetId === null || swapQuery.trim().length < 2) {
+      setSwapResults([]);
+      return;
+    }
+
+    swapTimer.current = setTimeout(async () => {
+      setSwapSearching(true);
+      const res = await apiSearch(swapQuery.trim());
+      setSwapResults(res || []);
+      setSwapNoRes((res || []).length === 0);
+      setSwapSearching(false);
+    }, 350);
+
+    return () => clearTimeout(swapTimer.current);
+  }, [swapQuery, swapAssetId]);
+
+  const chooseSwapAsset = (asset, result) => {
+    const type = inferType(result.type, result.symbol, result.name);
+    const currency = result.currency || guessCurrency(result.symbol);
+    onSwapAsset(pf.id, asset.id, {
+      name: result.name || asset.name,
+      ticker: result.symbol || asset.ticker,
+      type,
+      currency,
+    });
+    setSwapAssetId(null);
+    setSwapQuery("");
+    setSwapResults([]);
+    setSwapNoRes(false);
+  };
 
   return (
     <div style={{ ...card({ padding: 0, overflow: "hidden" }), borderTop: "3px solid " + color }}>
@@ -379,50 +426,80 @@ function PortfolioCard({ pf, prices, fx, loading, onAddAsset, onDeleteAsset, onD
                     const at = ASSET_TYPES.find((a) => a.key === asset.type);
                     const isFinanceAdjustment = Boolean(asset.isFinanceAdjustment);
                     return (
-                      <tr key={asset.id} style={{ borderBottom: "1px solid " + BD }}>
-                        <td style={{ padding: "12px 12px" }}>
-                          <div style={{ fontWeight: 500, color: T }}>{asset.name || asset.ticker || "–"}</div>
-                          {asset.ticker && <div style={{ fontSize: 11, color: G, fontFamily: "monospace" }}>{asset.ticker}</div>}
-                          <div style={{ fontSize: 10, color: T3 }}>{at?.label} · {asset.currency}{isFinanceAdjustment ? " · ajuste automático" : ""}</div>
-                        </td>
-                        <td style={{ padding: "12px 12px", color: T2, fontFamily: "monospace", fontSize: 12 }}>{(asset.quantity || 0).toLocaleString("de-CH", { maximumFractionDigits: 8 })}</td>
-                        <td style={{ padding: "12px 12px" }}>
-                          {asset.buyPrice > 0 ? (
-                            <>
-                              <div style={{ color: T2 }}>{asset.currency} {fmtF(asset.buyPrice)}</div>
-                              {asset.buyDate && <div style={{ fontSize: 10, color: T3 }}>{fmtD(asset.buyDate)}</div>}
-                            </>
-                          ) : (
-                            <span style={{ color: T3 }}>–</span>
-                          )}
-                        </td>
-                        <td style={{ padding: "12px 12px" }}>
-                          {asset.type === "fiat" ? (
-                            <span style={{ color: T3 }}>–</span>
-                          ) : isLoad ? (
-                            <span style={{ color: T3, fontSize: 12 }}>...</span>
-                          ) : p ? (
-                            <div>
-                              <div style={{ color: T }}>{asset.currency} {fmtF(p.price)}</div>
-                              <div style={{ fontSize: 11, color: p.changePct >= 0 ? GR : RD }}>{p.changePct >= 0 ? "+" : ""}{(p.changePct || 0).toFixed(2)}%</div>
-                            </div>
-                          ) : (
-                            <span style={{ color: T3 }}>N/D</span>
-                          )}
-                        </td>
-                        <td style={{ padding: "12px 12px" }}><span style={{ color: G, fontWeight: 500 }}>{val !== null ? "CHF " + fmtF(val) : "–"}</span></td>
-                        <td style={{ padding: "12px 12px" }}>
-                          {pl !== null ? (
-                            <div>
-                              <div style={{ color: pl >= 0 ? GR : RD, fontWeight: 500 }}>{pl >= 0 ? "+" : ""}CHF {fmtF(Math.abs(pl))}</div>
-                              {plPct !== null && <div style={{ fontSize: 11, color: pl >= 0 ? GR : RD }}>{plPct >= 0 ? "+" : ""}{plPct.toFixed(1)}%</div>}
-                            </div>
-                          ) : (
-                            <span style={{ color: T3 }}>–</span>
-                          )}
-                        </td>
-                        <td style={{ padding: "12px 8px" }}>{isFinanceAdjustment ? null : <button onClick={() => onDeleteAsset(pf.id, asset.id)} style={bsm({ color: RD, borderColor: RD + "25", padding: "3px 8px" })}>×</button>}</td>
-                      </tr>
+                      <Fragment key={asset.id}>
+                        <tr style={{ borderBottom: "1px solid " + BD }}>
+                          <td style={{ padding: "12px 12px" }}>
+                            <div style={{ fontWeight: 500, color: T }}>{asset.name || asset.ticker || "–"}</div>
+                            {asset.ticker && <div style={{ fontSize: 11, color: G, fontFamily: "monospace" }}>{asset.ticker}</div>}
+                            <div style={{ fontSize: 10, color: T3 }}>{at?.label} · {asset.currency}{isFinanceAdjustment ? " · ajuste automático" : ""}</div>
+                          </td>
+                          <td style={{ padding: "12px 12px", color: T2, fontFamily: "monospace", fontSize: 12 }}>{(asset.quantity || 0).toLocaleString("de-CH", { maximumFractionDigits: 8 })}</td>
+                          <td style={{ padding: "12px 12px" }}>
+                            {asset.buyPrice > 0 ? (
+                              <>
+                                <div style={{ color: T2 }}>{asset.currency} {fmtF(asset.buyPrice)}</div>
+                                {asset.buyDate && <div style={{ fontSize: 10, color: T3 }}>{fmtD(asset.buyDate)}</div>}
+                              </>
+                            ) : (
+                              <span style={{ color: T3 }}>–</span>
+                            )}
+                          </td>
+                          <td style={{ padding: "12px 12px" }}>
+                            {asset.type === "fiat" ? (
+                              <span style={{ color: T3 }}>–</span>
+                            ) : isLoad ? (
+                              <span style={{ color: T3, fontSize: 12 }}>...</span>
+                            ) : p ? (
+                              <div>
+                                <div style={{ color: T }}>{asset.currency} {fmtF(p.price)}</div>
+                                <div style={{ fontSize: 11, color: p.changePct >= 0 ? GR : RD }}>{p.changePct >= 0 ? "+" : ""}{(p.changePct || 0).toFixed(2)}%</div>
+                              </div>
+                            ) : (
+                              <span style={{ color: T3 }}>N/D</span>
+                            )}
+                          </td>
+                          <td style={{ padding: "12px 12px" }}><span style={{ color: G, fontWeight: 500 }}>{val !== null ? "CHF " + fmtF(val) : "–"}</span></td>
+                          <td style={{ padding: "12px 12px" }}>
+                            {pl !== null ? (
+                              <div>
+                                <div style={{ color: pl >= 0 ? GR : RD, fontWeight: 500 }}>{pl >= 0 ? "+" : ""}CHF {fmtF(Math.abs(pl))}</div>
+                                {plPct !== null && <div style={{ fontSize: 11, color: pl >= 0 ? GR : RD }}>{plPct >= 0 ? "+" : ""}{plPct.toFixed(1)}%</div>}
+                              </div>
+                            ) : (
+                              <span style={{ color: T3 }}>–</span>
+                            )}
+                          </td>
+                          <td style={{ padding: "12px 8px" }}>
+                            {isFinanceAdjustment ? null : (
+                              <div style={{ display: "flex", gap: 6 }}>
+                                {asset.type !== "fiat" && <button onClick={() => { setSwapAssetId(asset.id); setSwapQuery(""); setSwapResults([]); setSwapNoRes(false); }} style={bsm({ color: BL, borderColor: BL + "25", padding: "3px 8px" })}>Trocar</button>}
+                                <button onClick={() => onDeleteAsset(pf.id, asset.id)} style={bsm({ color: RD, borderColor: RD + "25", padding: "3px 8px" })}>×</button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                        {swapAssetId === asset.id && asset.type !== "fiat" && (
+                          <tr style={{ borderBottom: "1px solid " + BD }}>
+                            <td colSpan={7} style={{ padding: "10px 12px", position: "relative" }}>
+                              <input style={{ ...inp, fontSize: 12, padding: "8px 10px" }} placeholder="Pesquisar novo ativo (ticker/nome)..." value={swapQuery} onChange={(e) => setSwapQuery(e.target.value)} />
+                              {(swapResults.length > 0 || swapNoRes) && (
+                                <div style={{ marginTop: 6, background: S2, border: "1px solid " + BD2, borderRadius: 8, overflow: "hidden" }}>
+                                  {swapNoRes && <p style={{ color: T3, fontSize: 11, padding: "8px 10px" }}>{swapSearching ? "a procurar..." : "Sem resultados"}</p>}
+                                  {swapResults.map((res, index) => (
+                                    <div key={index} onClick={() => chooseSwapAsset(asset, res)} style={{ padding: "8px 10px", cursor: "pointer", borderBottom: index < swapResults.length - 1 ? "1px solid " + BD : "none" }}>
+                                      <span style={{ color: T, fontSize: 11, fontFamily: "monospace", fontWeight: 700 }}>{res.symbol}</span>
+                                      <span style={{ color: T2, fontSize: 11, marginLeft: 8 }}>{res.name}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+                            <td style={{ padding: "10px 8px" }}>
+                              <button onClick={() => { setSwapAssetId(null); setSwapQuery(""); setSwapResults([]); setSwapNoRes(false); }} style={bsm({ color: T2, borderColor: BD2, padding: "3px 8px" })}>Fechar</button>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                     );
                   })}
                 </tbody>
@@ -488,6 +565,7 @@ function Marcos({ portfolios, prices, fx, baseCurrency, embedded = false }) {
 }
 
 export default function PatrimonioSection({ portfolios, savePortfolios, prices, setPrices, fx, setFx, nwHistory, saveNwHistory, baseCurrency, onUpdateBaseCurrency, financeData }) {
+  const [activeSection, setActiveSection] = useState("overview");
   const [loading, setLoading] = useState(new Set());
   const [refreshing, setRefreshing] = useState(false);
   const [lastRef, setLastRef] = useState(null);
@@ -632,6 +710,21 @@ export default function PatrimonioSection({ portfolios, savePortfolios, prices, 
 
   const deleteAsset = (pid, aid) => savePf(portfolios.map((p) => (p.id === pid ? { ...p, assets: p.assets.filter((a) => a.id !== aid) } : p)));
 
+  const swapAsset = (pid, aid, patch) => {
+    savePf(portfolios.map((p) => (
+      p.id === pid
+        ? { ...p, assets: p.assets.map((a) => (a.id === aid ? { ...a, ...patch } : a)) }
+        : p
+    )));
+
+    if (patch?.ticker && patch?.type !== "fiat") {
+      setTimeout(async () => {
+        const q = await apiSingleQuote(patch.ticker);
+        if (q) setPrices((prev) => ({ ...prev, [String(patch.ticker).toUpperCase()]: q }));
+      }, 250);
+    }
+  };
+
   return (
     <div style={{ paddingBottom: 40 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -642,62 +735,92 @@ export default function PatrimonioSection({ portfolios, savePortfolios, prices, 
             <option value="EUR">EUR</option>
             <option value="USD">USD</option>
           </select>
-          <button style={bsm({ color: BL, borderColor: BL + "30", opacity: refreshing ? 0.6 : 1 })} onClick={refreshPrices} disabled={refreshing}>{refreshing ? "a actualizar..." : "↻ Actualizar Preços"}</button>
+          <button style={bsm({ color: BL, borderColor: BL + "30", opacity: refreshing ? 0.6 : 1 })} onClick={refreshPrices} disabled={refreshing} title="Atualizar preços" aria-label="Atualizar preços">{refreshing ? "⟳" : "↻"}</button>
           <button style={btnG} onClick={() => setShowAddPF(true)}>+ Carteira</button>
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12, marginBottom: 20 }}>
-        {[
-          { label: "Patrimônio Total", val: baseCurrency + " " + fmtF(total), sub: ((total / toBaseCurrency(TARGET, baseCurrency, fx)) * 100).toFixed(2) + "% do objetivo", color: G },
-          { label: "Total Investido", val: baseCurrency + " " + fmtF(totalCost), sub: "custo de aquisição" },
-          { label: "P&L Total", val: (pnl >= 0 ? "+" : "") + baseCurrency + " " + fmtF(Math.abs(pnl)), sub: (pnlPct >= 0 ? "+" : "") + pnlPct.toFixed(1) + "%", color: pnl >= 0 ? GR : RD },
-        ].map((s) => (
-          <div key={s.label} style={{ ...card({ padding: "16px 18px" }), borderColor: s.color ? s.color + "35" : BD }}>
-            <p style={{ fontSize: 11, color: T2, marginBottom: 6 }}>{s.label}</p>
-            <p style={{ fontSize: 16, color: s.color || T, fontWeight: 600, lineHeight: 1.2 }}>{s.val}</p>
-            <p style={{ fontSize: 11, color: T3, marginTop: 5 }}>{s.sub}</p>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ ...card({ padding: "16px 18px", marginBottom: 20 }) }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-          <span style={{ fontSize: 13, color: T2 }}>Rota ao Milhão</span>
-          <span style={{ fontSize: 13, color: G, fontWeight: 600 }}>{((total / TARGET) * 100).toFixed(2)}%</span>
-        </div>
-        <ProgressBar value={total} max={TARGET} height={8} />
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
-          {lastRef && <p style={{ fontSize: 11, color: T3 }}>Actualizado: {lastRef.toLocaleTimeString("pt-PT")}</p>}
-          <p style={{ fontSize: 11, color: T3 }}>EUR/CHF {(fx.EUR || 0).toFixed(4)} · USD/CHF {(fx.USD || 0).toFixed(4)} · GBP/CHF {(fx.GBP || 0).toFixed(4)}</p>
-        </div>
-      </div>
-
-      <div style={{ ...card({ marginBottom: 20, padding: "20px 18px 8px" }) }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <p style={{ fontSize: 12, color: T2, fontWeight: 600, letterSpacing: 1 }}>EVOLUÇÃO DO PATRIMÔNIO</p>
-          <span style={{ fontSize: 11, color: T3 }}>{chartData.length} ponto{chartData.length === 1 ? "" : "s"}</span>
-        </div>
-        <NwChart data={chartData} baseCurrency={baseCurrency} />
-      </div>
-
-      {portfolios.length === 0 ? (
-        <div style={{ ...card({ padding: "50px 20px", textAlign: "center" }) }}>
-          <p style={{ color: T2, fontSize: 15, marginBottom: 8 }}>Nenhuma carteira ainda</p>
-          <p style={{ color: T3, fontSize: 13, marginBottom: 20 }}>Adiciona o teu banco, corretora ou exchange.</p>
-          <button style={btnG} onClick={() => setShowAddPF(true)}>+ Adicionar Carteira</button>
-        </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {visiblePortfolios.map((p) => (
-            <PortfolioCard key={p.id} pf={p} prices={prices} fx={fx} loading={loading} onAddAsset={(id) => setAddFor(id)} onDeleteAsset={deleteAsset} onDelete={deletePortfolio} baseCurrency={baseCurrency} monthlyBalanceChf={monthlyAccountBalances[String(p.id)] || 0} financeMonthLabel={financeMonthLabel} />
+      <div style={{ ...card({ marginBottom: 16, padding: "12px" }) }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 8 }}>
+          {PATRIMONIO_SECTIONS.map((section) => (
+            <button
+              key={section.key}
+              onClick={() => setActiveSection(section.key)}
+              style={{
+                ...bsm({ padding: "8px 10px", fontSize: 12 }),
+                background: activeSection === section.key ? G + "18" : "transparent",
+                color: activeSection === section.key ? G : T3,
+                border: "1px solid " + (activeSection === section.key ? G + "45" : "transparent"),
+                borderRadius: 10,
+                fontWeight: activeSection === section.key ? 700 : 500,
+                whiteSpace: "nowrap",
+                width: "100%",
+              }}>
+              {section.label}
+            </button>
           ))}
         </div>
+      </div>
+
+      {activeSection === "overview" && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12, marginBottom: 20 }}>
+            {[
+              { label: "Patrimônio", val: baseCurrency + " " + fmtF(total), sub: ((total / toBaseCurrency(TARGET, baseCurrency, fx)) * 100).toFixed(2) + "% meta", color: G },
+              { label: "Investido", val: baseCurrency + " " + fmtF(totalCost), sub: "custo total" },
+              { label: "P&L", val: (pnl >= 0 ? "+" : "") + baseCurrency + " " + fmtF(Math.abs(pnl)), sub: (pnlPct >= 0 ? "+" : "") + pnlPct.toFixed(1) + "%", color: pnl >= 0 ? GR : RD },
+            ].map((s) => (
+              <div key={s.label} style={{ ...card({ padding: "16px 18px" }), borderColor: s.color ? s.color + "35" : BD }}>
+                <p style={{ fontSize: 11, color: T2, marginBottom: 6 }}>{s.label}</p>
+                <p style={{ fontSize: 16, color: s.color || T, fontWeight: 600, lineHeight: 1.2 }}>{s.val}</p>
+                <p style={{ fontSize: 11, color: T3, marginTop: 5 }}>{s.sub}</p>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ ...card({ padding: "16px 18px", marginBottom: 20 }) }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+              <span style={{ fontSize: 13, color: T2 }}>Progresso</span>
+              <span style={{ fontSize: 13, color: G, fontWeight: 600 }}>{((total / TARGET) * 100).toFixed(2)}%</span>
+            </div>
+            <ProgressBar value={total} max={TARGET} height={8} />
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
+              {lastRef && <p style={{ fontSize: 11, color: T3 }}>Atualizado: {lastRef.toLocaleTimeString("pt-PT")}</p>}
+              <p style={{ fontSize: 11, color: T3 }}>EUR/CHF {(fx.EUR || 0).toFixed(4)} · USD/CHF {(fx.USD || 0).toFixed(4)} · GBP/CHF {(fx.GBP || 0).toFixed(4)}</p>
+            </div>
+          </div>
+
+          <div style={{ ...card({ marginBottom: 20, padding: "20px 18px 8px" }) }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <p style={{ fontSize: 12, color: T2, fontWeight: 600, letterSpacing: 1 }}>EVOLUÇÃO</p>
+              <span style={{ fontSize: 11, color: T3 }}>{chartData.length} ponto{chartData.length === 1 ? "" : "s"}</span>
+            </div>
+            <NwChart data={chartData} baseCurrency={baseCurrency} />
+          </div>
+        </>
       )}
 
-      <div style={{ marginTop: 20 }}>
-        <Marcos portfolios={visiblePortfolios} prices={prices} fx={fx} baseCurrency={baseCurrency} embedded />
-      </div>
+      {activeSection === "portfolios" && (
+        portfolios.length === 0 ? (
+          <div style={{ ...card({ padding: "50px 20px", textAlign: "center" }) }}>
+            <p style={{ color: T2, fontSize: 15, marginBottom: 8 }}>Nenhuma carteira ainda</p>
+            <p style={{ color: T3, fontSize: 13, marginBottom: 20 }}>Adiciona o teu banco, corretora ou exchange.</p>
+            <button style={btnG} onClick={() => setShowAddPF(true)}>+ Adicionar Carteira</button>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {visiblePortfolios.map((p) => (
+              <PortfolioCard key={p.id} pf={p} prices={prices} fx={fx} loading={loading} onAddAsset={(id) => setAddFor(id)} onDeleteAsset={deleteAsset} onSwapAsset={swapAsset} onDelete={deletePortfolio} baseCurrency={baseCurrency} monthlyBalanceChf={monthlyAccountBalances[String(p.id)] || 0} financeMonthLabel={financeMonthLabel} />
+            ))}
+          </div>
+        )
+      )}
+
+      {activeSection === "milestones" && (
+        <div style={{ marginTop: 6 }}>
+          <Marcos portfolios={visiblePortfolios} prices={prices} fx={fx} baseCurrency={baseCurrency} embedded />
+        </div>
+      )}
 
       {showAddPF && (
         <Modal title="Nova Carteira" onClose={() => setShowAddPF(false)}>

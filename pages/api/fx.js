@@ -1,10 +1,21 @@
-import yahooFinance from "yahoo-finance2";
 import { requireAuth } from "../../lib/auth";
-
-const yf = new yahooFinance();
 
 const FX_PAIRS = ["EURCHF=X", "USDCHF=X", "GBPCHF=X"];
 const CURRENCY_MAP = { "EURCHF=X": "EUR", "USDCHF=X": "USD", "GBPCHF=X": "GBP" };
+
+async function queryYahooFx(pair) {
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(pair)}?range=1d&interval=1d`;
+    const resp = await fetch(url);
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const price = data.chart?.result?.[0]?.meta?.regularMarketPrice;
+    if (!price || Number.isNaN(price)) return null;
+    return Number(price);
+  } catch {
+    return null;
+  }
+}
 
 async function queryStooqFx(pairs) {
   const rates = {};
@@ -35,14 +46,12 @@ export default async function handler(req, res) {
   if (!user) return;
 
   try {
-    const raw = await yf.quote(FX_PAIRS, { fields: ["regularMarketPrice"] });
-    const items = Array.isArray(raw) ? raw : [raw];
-
     const rates = { EUR: 0.94, USD: 0.89, GBP: 1.13 }; // fallbacks
-    for (const item of items) {
-      const cur = CURRENCY_MAP[item.symbol];
-      if (cur && item.regularMarketPrice > 0) {
-        rates[cur] = item.regularMarketPrice;
+    for (const pair of FX_PAIRS) {
+      const cur = CURRENCY_MAP[pair];
+      const rate = await queryYahooFx(pair);
+      if (cur && rate > 0) {
+        rates[cur] = rate;
       }
     }
 
