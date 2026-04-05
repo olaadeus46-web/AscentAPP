@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   T,
   T2,
@@ -23,8 +23,15 @@ export default function IdeiasSection({ ideas, saveIdeas }) {
   const [filter, setFilter] = useState("all");
   const [show, setShow] = useState(false);
   const [edit, setEdit] = useState(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIdeaIds, setSelectedIdeaIds] = useState([]);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const emp = { title: "", description: "", category: "Digital", feasibility: 3, potential: 3, status: "idea", notes: "" };
   const [form, setForm] = useState(emp);
+
+  useEffect(() => {
+    setSelectedIdeaIds((prev) => prev.filter((id) => ideas.some((idea) => idea.id === id)));
+  }, [ideas]);
 
   const save = () => {
     if (!form.title.trim()) return;
@@ -39,11 +46,50 @@ export default function IdeiasSection({ ideas, saveIdeas }) {
     .slice()
     .sort((a, b) => b.potential + b.feasibility - (a.potential + a.feasibility));
 
+  const startSelection = () => {
+    setSelectionMode(true);
+    setSelectedIdeaIds([]);
+    setShowDeleteConfirm(false);
+  };
+
+  const cancelSelection = () => {
+    setSelectionMode(false);
+    setSelectedIdeaIds([]);
+    setShowDeleteConfirm(false);
+  };
+
+  const toggleSelection = (ideaId) => {
+    setSelectedIdeaIds((prev) => (
+      prev.includes(ideaId)
+        ? prev.filter((id) => id !== ideaId)
+        : [...prev, ideaId]
+    ));
+  };
+
+  const confirmDeleteSelected = () => {
+    if (!selectedIdeaIds.length) return;
+    const idsToDelete = new Set(selectedIdeaIds);
+    saveIdeas(ideas.filter((idea) => !idsToDelete.has(idea.id)));
+    setShowDeleteConfirm(false);
+    setSelectionMode(false);
+    setSelectedIdeaIds([]);
+  };
+
   return (
     <div style={{ paddingBottom: 40 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 22, color: T }}>Ideias</h2>
-        <button style={btnG} onClick={() => { setForm(emp); setEdit(null); setShow(true); }}>+ Nova Ideia</button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {!selectionMode && <button style={bsm({ color: RD, borderColor: RD + "30" })} onClick={startSelection}>Selecionar</button>}
+          {selectionMode && (
+            <>
+              <span style={{ fontSize: 12, color: T2, alignSelf: "center" }}>{selectedIdeaIds.length} selecionada(s)</span>
+              <button style={bsm()} onClick={cancelSelection}>Cancelar</button>
+              <button style={bsm({ color: RD, borderColor: RD + "30", opacity: selectedIdeaIds.length ? 1 : 0.55 })} disabled={!selectedIdeaIds.length} onClick={() => setShowDeleteConfirm(true)}>Apagar selecionadas</button>
+            </>
+          )}
+          <button style={btnG} onClick={() => { setForm(emp); setEdit(null); setShow(true); }}>+</button>
+        </div>
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
@@ -72,14 +118,41 @@ export default function IdeiasSection({ ideas, saveIdeas }) {
                 <select value={idea.status} onChange={(e) => saveIdeas(ideas.map((i) => (i.id === idea.id ? { ...i, status: e.target.value } : i)))} style={{ ...inp, width: "auto", padding: "5px 10px", fontSize: 12 }}>
                   {IDEA_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
                 </select>
-                <button onClick={() => { setForm({ ...idea }); setEdit(idea.id); setShow(true); }} style={bsm()}>Editar</button>
-                <button onClick={() => saveIdeas(ideas.filter((i) => i.id !== idea.id))} style={bsm({ color: RD, borderColor: RD + "30" })}>×</button>
+                {!selectionMode && <button onClick={() => { setForm({ ...idea }); setEdit(idea.id); setShow(true); }} style={bsm()}>Editar</button>}
+                {selectionMode && (
+                  <button
+                    onClick={() => toggleSelection(idea.id)}
+                    style={bsm({
+                      color: selectedIdeaIds.includes(idea.id) ? G : T2,
+                      borderColor: selectedIdeaIds.includes(idea.id) ? G + "35" : BD2,
+                      background: selectedIdeaIds.includes(idea.id) ? G + "1f" : "transparent",
+                    })}>
+                    {selectedIdeaIds.includes(idea.id) ? "Selecionada" : "Selecionar"}
+                  </button>
+                )}
               </div>
             </div>
           );
         })}
         {filtered.length === 0 && <p style={{ color: T3, fontSize: 14, textAlign: "center", padding: "40px 0" }}>Nenhuma ideia aqui.</p>}
       </div>
+
+      {showDeleteConfirm && (
+        <Modal title="Confirmar eliminação" onClose={() => setShowDeleteConfirm(false)}>
+          <p style={{ fontSize: 13, color: T2, lineHeight: 1.45, marginBottom: 12 }}>
+            Vais apagar {selectedIdeaIds.length} ideia(s). Confirma se são estas:
+          </p>
+          <div style={{ maxHeight: 220, overflowY: "auto", border: "1px solid " + BD2, borderRadius: 10, padding: "10px 12px", background: S3 }}>
+            {ideas.filter((idea) => selectedIdeaIds.includes(idea.id)).map((idea) => (
+              <p key={idea.id} style={{ fontSize: 12, color: T, marginBottom: 6 }}>• {idea.title}</p>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+            <button style={{ ...btn({ flex: 1 }) }} onClick={() => setShowDeleteConfirm(false)}>Cancelar</button>
+            <button style={{ ...bsm({ flex: 1, color: RD, borderColor: RD + "30" }) }} onClick={confirmDeleteSelected}>Confirmar</button>
+          </div>
+        </Modal>
+      )}
 
       {show && (
         <Modal title={edit ? "Editar Ideia" : "Nova Ideia"} onClose={() => { setShow(false); setEdit(null); }}>

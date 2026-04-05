@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   G,
   T,
@@ -9,6 +9,7 @@ import {
   BL,
   PU,
   BD,
+  BD2,
   S2,
   card,
   bsm,
@@ -25,10 +26,17 @@ export default function ObjetivosSection({ goals, saveGoals, onAddCalendarTask }
   const [show, setShow] = useState(false);
   const [edit, setEdit] = useState(null);
   const [aiByGoal, setAiByGoal] = useState({});
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedGoalIds, setSelectedGoalIds] = useState([]);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const emp = { title: "", category: "Financeiro", current: 0, target: 0, unit: "CHF", deadline: "", notes: "" };
   const [form, setForm] = useState(emp);
   const CATS = ["Financeiro", "Hábito", "Aprendizagem", "Projeto", "Outro"];
   const COLS = { Financeiro: G, Hábito: GR, Aprendizagem: BL, Projeto: PU, Outro: T2 };
+
+  useEffect(() => {
+    setSelectedGoalIds((prev) => prev.filter((id) => goals.some((goal) => goal.id === id)));
+  }, [goals]);
 
   const save = () => {
     if (!form.title.trim() || !form.target) return;
@@ -63,11 +71,50 @@ export default function ObjetivosSection({ goals, saveGoals, onAddCalendarTask }
     }
   };
 
+  const startSelection = () => {
+    setSelectionMode(true);
+    setSelectedGoalIds([]);
+    setShowDeleteConfirm(false);
+  };
+
+  const cancelSelection = () => {
+    setSelectionMode(false);
+    setSelectedGoalIds([]);
+    setShowDeleteConfirm(false);
+  };
+
+  const toggleSelection = (goalId) => {
+    setSelectedGoalIds((prev) => (
+      prev.includes(goalId)
+        ? prev.filter((id) => id !== goalId)
+        : [...prev, goalId]
+    ));
+  };
+
+  const confirmDeleteSelected = () => {
+    if (!selectedGoalIds.length) return;
+    const idsToDelete = new Set(selectedGoalIds);
+    saveGoals(goals.filter((goal) => !idsToDelete.has(goal.id)));
+    setShowDeleteConfirm(false);
+    setSelectionMode(false);
+    setSelectedGoalIds([]);
+  };
+
   return (
     <div style={{ paddingBottom: 40 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 22, color: T }}>Objetivos</h2>
-        <button title="Novo objetivo" aria-label="Novo objetivo" style={btnG} onClick={() => { setForm(emp); setEdit(null); setShow(true); }}>+</button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {!selectionMode && <button style={bsm({ color: RD, borderColor: RD + "30" })} onClick={startSelection}>Selecionar</button>}
+          {selectionMode && (
+            <>
+              <span style={{ fontSize: 12, color: T2, alignSelf: "center" }}>{selectedGoalIds.length} selecionado(s)</span>
+              <button style={bsm()} onClick={cancelSelection}>Cancelar</button>
+              <button style={bsm({ color: RD, borderColor: RD + "30", opacity: selectedGoalIds.length ? 1 : 0.55 })} disabled={!selectedGoalIds.length} onClick={() => setShowDeleteConfirm(true)}>Apagar selecionados</button>
+            </>
+          )}
+          <button title="Novo objetivo" aria-label="Novo objetivo" style={btnG} onClick={() => { setForm(emp); setEdit(null); setShow(true); }}>+</button>
+        </div>
       </div>
 
       {goals.length === 0 ? (
@@ -109,9 +156,21 @@ export default function ObjetivosSection({ goals, saveGoals, onAddCalendarTask }
 
                 <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
                   <input type="number" placeholder="Progresso actual" value={g.current || ""} onChange={(e) => saveGoals(goals.map((x) => (x.id === g.id ? { ...x, current: parseFloat(e.target.value) || 0 } : x)))} style={{ ...inp, width: 140, padding: "6px 10px", fontSize: 13 }} />
-                  <button title="Editar objetivo" aria-label="Editar objetivo" onClick={() => { setForm({ ...g }); setEdit(g.id); setShow(true); }} style={bsm()}>✎</button>
+                  {!selectionMode && <button title="Editar objetivo" aria-label="Editar objetivo" onClick={() => { setForm({ ...g }); setEdit(g.id); setShow(true); }} style={bsm()}>Editar</button>}
                   <button title="Gerar sugestões AI" aria-label="Gerar sugestões AI" onClick={() => loadAiSuggestions(g)} disabled={aiState.loading} style={{ ...bsm({ color: BL, borderColor: BL + "30" }), opacity: aiState.loading ? 0.65 : 1 }}>{aiState.loading ? "⟳" : "✨"}</button>
-                  <button title="Eliminar objetivo" aria-label="Eliminar objetivo" onClick={() => saveGoals(goals.filter((x) => x.id !== g.id))} style={bsm({ color: RD, borderColor: RD + "30" })}>🗑</button>
+                  {selectionMode && (
+                    <button
+                      title={selectedGoalIds.includes(g.id) ? "Remover da seleção" : "Selecionar para apagar"}
+                      aria-label={selectedGoalIds.includes(g.id) ? "Remover da seleção" : "Selecionar para apagar"}
+                      onClick={() => toggleSelection(g.id)}
+                      style={bsm({
+                        color: selectedGoalIds.includes(g.id) ? G : T2,
+                        borderColor: selectedGoalIds.includes(g.id) ? G + "35" : BD2,
+                        background: selectedGoalIds.includes(g.id) ? G + "1f" : "transparent",
+                      })}>
+                      {selectedGoalIds.includes(g.id) ? "Selecionado" : "Selecionar"}
+                    </button>
+                  )}
                 </div>
 
                 {(aiState.error || suggestionHistory.length > 0) && (
@@ -154,6 +213,23 @@ export default function ObjetivosSection({ goals, saveGoals, onAddCalendarTask }
               <button title="Cancelar" aria-label="Cancelar" style={{ ...btn({ flex: 1 }) }} onClick={() => { setShow(false); setEdit(null); }}>×</button>
               <button title="Guardar" aria-label="Guardar" style={{ ...btnG, flex: 1 }} onClick={save}>✓</button>
             </div>
+          </div>
+        </Modal>
+      )}
+
+      {showDeleteConfirm && (
+        <Modal title="Confirmar eliminação" onClose={() => setShowDeleteConfirm(false)}>
+          <p style={{ fontSize: 13, color: T2, lineHeight: 1.45, marginBottom: 12 }}>
+            Vais apagar {selectedGoalIds.length} objetivo(s). Confirma se são estes:
+          </p>
+          <div style={{ maxHeight: 220, overflowY: "auto", border: "1px solid " + BD, borderRadius: 10, padding: "10px 12px", background: S2 }}>
+            {goals.filter((goal) => selectedGoalIds.includes(goal.id)).map((goal) => (
+              <p key={goal.id} style={{ fontSize: 12, color: T, marginBottom: 6 }}>• {goal.title}</p>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+            <button style={{ ...btn({ flex: 1 }) }} onClick={() => setShowDeleteConfirm(false)}>Cancelar</button>
+            <button style={{ ...bsm({ flex: 1, color: RD, borderColor: RD + "30" }) }} onClick={confirmDeleteSelected}>Confirmar</button>
           </div>
         </Modal>
       )}

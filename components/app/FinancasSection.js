@@ -246,7 +246,18 @@ function ExpenseBreakdown({ rows, totalExpenses, currencyLabel }) {
   );
 }
 
-function AllocationCard({ allocation, incomeTotal, actualAmount, categoriesById, onEdit, onRemove, compact = false, currencyLabel }) {
+function AllocationCard({
+  allocation,
+  incomeTotal,
+  actualAmount,
+  categoriesById,
+  onEdit,
+  compact = false,
+  currencyLabel,
+  selectionMode = false,
+  selected = false,
+  onToggleSelect,
+}) {
   const targetAmount = incomeTotal * ((Number(allocation.percent) || 0) / 100);
   const progressMax = Math.max(targetAmount, actualAmount, 1);
   const linkedCategories = allocation.categoryIds
@@ -255,13 +266,28 @@ function AllocationCard({ allocation, incomeTotal, actualAmount, categoriesById,
 
   return (
     <div style={{ ...card({ padding: "16px 18px" }) }}>
-      <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr" : "minmax(0,1fr) auto auto", gap: 10, alignItems: "center", marginBottom: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr" : "minmax(0,1fr) auto", gap: 10, alignItems: "center", marginBottom: 12 }}>
         <div>
           <p style={{ fontSize: 14, color: T, fontWeight: 600 }}>{allocation.name}</p>
           <p style={{ fontSize: 11, color: T3, marginTop: 4 }}>{Number(allocation.percent) || 0}% do rendimento mensal</p>
         </div>
-        <button onClick={onEdit} title="Editar alocação" aria-label="Editar alocação" style={bsm({ color: BL, borderColor: BL + "30", minWidth: 34, padding: "6px 10px" })}>✎</button>
-        <button onClick={onRemove} title="Remover alocação" aria-label="Remover alocação" style={bsm({ color: RD, borderColor: RD + "35", minWidth: 34, padding: "6px 10px" })}>🗑</button>
+        {selectionMode ? (
+          <button
+            onClick={onToggleSelect}
+            title={selected ? "Remover da seleção" : "Selecionar para apagar"}
+            aria-label={selected ? "Remover da seleção" : "Selecionar para apagar"}
+            style={bsm({
+              color: selected ? G : T2,
+              borderColor: selected ? G + "35" : BD2,
+              background: selected ? G + "1f" : "transparent",
+              minWidth: 34,
+              padding: "6px 10px",
+            })}>
+            {selected ? "Selecionado" : "Selecionar"}
+          </button>
+        ) : (
+          <button onClick={onEdit} title="Editar alocação" aria-label="Editar alocação" style={bsm({ color: BL, borderColor: BL + "30", minWidth: 34, padding: "6px 10px" })}>Editar</button>
+        )}
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 8, flexWrap: "wrap" }}>
         <span style={{ fontSize: 12, color: T2 }}>Meta mensal: {currencyLabel} {fmtF(targetAmount)}</span>
@@ -304,7 +330,7 @@ function AllocationEditorModal({
             max="100"
             step="0.1"
             value={draft.percent}
-            onChange={(e) => onChangeDraft((prev) => ({ ...prev, percent: Number(e.target.value) || 0 }))}
+            onChange={(e) => onChangeDraft((prev) => ({ ...prev, percent: e.target.value }))}
           />
           <p style={{ fontSize: 11, color: T3, marginTop: 6 }}>Meta mensal estimada: {currencyLabel} {fmtF(targetAmount)}</p>
         </div>
@@ -345,7 +371,23 @@ function AllocationEditorModal({
   );
 }
 
-function TransactionCard({ item, category, accountName, categories, bankAccounts, isEditing, draft, onEdit, onDraftChange, onSaveEdit, onCancelEdit, onDelete, currencyLabel }) {
+function TransactionCard({
+  item,
+  category,
+  accountName,
+  categories,
+  bankAccounts,
+  isEditing,
+  draft,
+  onEdit,
+  onDraftChange,
+  onSaveEdit,
+  onCancelEdit,
+  currencyLabel,
+  selectionMode = false,
+  selected = false,
+  onToggleSelect,
+}) {
   const color = category?.color || T2;
   const draftCategories = categories.filter((entry) => entry.kind === (draft?.kind || "expense"));
 
@@ -377,10 +419,21 @@ function TransactionCard({ item, category, accountName, categories, bankAccounts
               <button title="Guardar" aria-label="Guardar" onClick={onSaveEdit} style={bsm({ color: G, borderColor: G + "30" })}>✓</button>
               <button title="Cancelar" aria-label="Cancelar" onClick={onCancelEdit} style={bsm({ color: T2, borderColor: BD2 })}>↩</button>
             </>
+          ) : selectionMode ? (
+            <button
+              title={selected ? "Remover da seleção" : "Selecionar para apagar"}
+              aria-label={selected ? "Remover da seleção" : "Selecionar para apagar"}
+              onClick={onToggleSelect}
+              style={bsm({
+                color: selected ? G : T2,
+                borderColor: selected ? G + "35" : BD2,
+                background: selected ? G + "1f" : "transparent",
+              })}>
+              {selected ? "Selecionado" : "Selecionar"}
+            </button>
           ) : (
             <>
-              <button title="Editar" aria-label="Editar" onClick={onEdit} style={bsm({ color: BL, borderColor: BL + "30" })}>✎</button>
-              <button title="Eliminar" aria-label="Eliminar" onClick={onDelete} style={bsm({ color: RD, borderColor: RD + "30" })}>🗑</button>
+              <button title="Editar" aria-label="Editar" onClick={onEdit} style={bsm({ color: BL, borderColor: BL + "30" })}>Editar</button>
             </>
           )}
         </div>
@@ -505,16 +558,52 @@ function StatementImportModal({ isCompact, fileInputRef, uploadFiles, setUploadF
   );
 }
 
-function DeleteTransactionConfirmModal({ isCompact, onCancel, onConfirm }) {
+function DeleteAllocationsConfirmModal({ isCompact, allocations, onCancel, onConfirm }) {
   return (
-    <Modal title="Eliminar Movimento" onClose={onCancel}>
-      <p style={{ fontSize: 13, color: T2, lineHeight: 1.45 }}>
-        Queres mesmo eliminar este movimento? Esta ação não pode ser revertida.
+    <Modal title="Confirmar eliminação" onClose={onCancel}>
+      <p style={{ fontSize: 13, color: T2, lineHeight: 1.45, marginBottom: 12 }}>
+        Vais apagar {allocations.length} alocação(ões). Confirma se são estas:
       </p>
+      <div style={{ maxHeight: 220, overflowY: "auto", border: "1px solid " + BD, borderRadius: 10, padding: "10px 12px", background: S2 }}>
+        {allocations.map((allocation) => (
+          <p key={allocation.id} style={{ fontSize: 12, color: T, marginBottom: 6 }}>
+            • {allocation.name}
+          </p>
+        ))}
+      </div>
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 18, gap: 8, flexWrap: "wrap" }}>
-        <button title="Cancelar" aria-label="Cancelar" style={bsm({ width: isCompact ? "100%" : "auto" })} onClick={onCancel}>×</button>
-        <button style={{ ...bsm({ width: isCompact ? "100%" : "auto", color: RD, borderColor: RD + "35", background: "rgba(255,255,255,.02)" }) }} onClick={onConfirm}>
-          🗑
+        <button title="Cancelar" aria-label="Cancelar" style={bsm({ width: isCompact ? "100%" : "auto" })} onClick={onCancel}>Cancelar</button>
+        <button
+          title="Confirmar eliminação"
+          aria-label="Confirmar eliminação"
+          style={{ ...bsm({ width: isCompact ? "100%" : "auto", color: RD, borderColor: RD + "35", background: "rgba(255,255,255,.02)" }) }}
+          onClick={onConfirm}>Confirmar
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function DeleteTransactionsConfirmModal({ isCompact, transactions, currencyLabel, onCancel, onConfirm }) {
+  return (
+    <Modal title="Confirmar eliminação" onClose={onCancel}>
+      <p style={{ fontSize: 13, color: T2, lineHeight: 1.45, marginBottom: 12 }}>
+        Vais apagar {transactions.length} movimento(s). Confirma se são estes:
+      </p>
+      <div style={{ maxHeight: 220, overflowY: "auto", border: "1px solid " + BD, borderRadius: 10, padding: "10px 12px", background: S2 }}>
+        {transactions.map((item) => (
+          <p key={item.id} style={{ fontSize: 12, color: T, marginBottom: 6 }}>
+            • {item.date} · {item.description} · {item.kind === "income" ? "+" : "-"}{currencyLabel} {fmtF(item.amount)}
+          </p>
+        ))}
+      </div>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 18, gap: 8, flexWrap: "wrap" }}>
+        <button title="Cancelar" aria-label="Cancelar" style={bsm({ width: isCompact ? "100%" : "auto" })} onClick={onCancel}>Cancelar</button>
+        <button
+          title="Confirmar eliminação"
+          aria-label="Confirmar eliminação"
+          style={{ ...bsm({ width: isCompact ? "100%" : "auto", color: RD, borderColor: RD + "35", background: "rgba(255,255,255,.02)" }) }}
+          onClick={onConfirm}>Confirmar
         </button>
       </div>
     </Modal>
@@ -529,14 +618,16 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
   const [isCompact, setIsCompact] = useState(false);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
-  const [deleteTransactionId, setDeleteTransactionId] = useState(null);
   const [planningTab, setPlanningTab] = useState("allocations");
   const [allocationEditorState, setAllocationEditorState] = useState({
     open: false,
     mode: "create",
     allocationId: null,
-    draft: { name: "", percent: 0, categoryIds: [] },
+    draft: { name: "", percent: "", categoryIds: [] },
   });
+  const [allocationSelectionMode, setAllocationSelectionMode] = useState(false);
+  const [selectedAllocationIds, setSelectedAllocationIds] = useState([]);
+  const [showDeleteAllocationsConfirm, setShowDeleteAllocationsConfirm] = useState(false);
   const [transactionFilters, setTransactionFilters] = useState(DEFAULT_TRANSACTION_FILTERS);
   const [transactionsPage, setTransactionsPage] = useState(1);
   const [comparisonMonths, setComparisonMonths] = useState(6);
@@ -558,6 +649,9 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
   const [uploadError, setUploadError] = useState("");
   const [uploadResult, setUploadResult] = useState(null);
   const [editingTransactionId, setEditingTransactionId] = useState(null);
+  const [transactionSelectionMode, setTransactionSelectionMode] = useState(false);
+  const [selectedTransactionIds, setSelectedTransactionIds] = useState([]);
+  const [showDeleteTransactionsConfirm, setShowDeleteTransactionsConfirm] = useState(false);
   const [editingDraft, setEditingDraft] = useState({
     accountId: "",
     date: currentDateValue(),
@@ -758,6 +852,30 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
     }
   }, [transactionsPage, currentTransactionsPage]);
 
+  useEffect(() => {
+    setSelectedAllocationIds((prev) => prev.filter((id) => normalizedFinanceData.allocations.some((item) => item.id === id)));
+  }, [normalizedFinanceData.allocations]);
+
+  useEffect(() => {
+    setSelectedTransactionIds((prev) => prev.filter((id) => normalizedFinanceData.transactions.some((item) => item.id === id)));
+  }, [normalizedFinanceData.transactions]);
+
+  useEffect(() => {
+    if (planningTab !== "allocations") {
+      setAllocationSelectionMode(false);
+      setSelectedAllocationIds([]);
+      setShowDeleteAllocationsConfirm(false);
+    }
+  }, [planningTab]);
+
+  useEffect(() => {
+    if (activeTab !== "transactions") {
+      setTransactionSelectionMode(false);
+      setSelectedTransactionIds([]);
+      setShowDeleteTransactionsConfirm(false);
+    }
+  }, [activeTab]);
+
   const persistFinance = (updater) => {
     saveFinanceData((prev) => normalizeFinanceData(typeof updater === "function" ? updater(normalizeFinanceData(prev || createDefaultFinanceData())) : updater));
   };
@@ -853,18 +971,42 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
     setEditingTransactionId(null);
   };
 
-  const deleteTransaction = (id) => {
-    setDeleteTransactionId(id);
+  const startTransactionSelection = () => {
+    setTransactionSelectionMode(true);
+    setSelectedTransactionIds([]);
+    setShowDeleteTransactionsConfirm(false);
+    setEditingTransactionId(null);
   };
 
-  const confirmDeleteTransaction = () => {
-    if (deleteTransactionId === null) return;
-    persistFinance((prev) => ({ ...prev, transactions: prev.transactions.filter((item) => item.id !== deleteTransactionId) }));
-    setDeleteTransactionId(null);
+  const cancelTransactionSelection = () => {
+    setTransactionSelectionMode(false);
+    setSelectedTransactionIds([]);
+    setShowDeleteTransactionsConfirm(false);
   };
 
-  const cancelDeleteTransaction = () => {
-    setDeleteTransactionId(null);
+  const toggleTransactionSelection = (transactionId) => {
+    setSelectedTransactionIds((prev) => (
+      prev.includes(transactionId)
+        ? prev.filter((id) => id !== transactionId)
+        : [...prev, transactionId]
+    ));
+  };
+
+  const openDeleteSelectedTransactionsConfirm = () => {
+    if (!selectedTransactionIds.length) return;
+    setShowDeleteTransactionsConfirm(true);
+  };
+
+  const confirmDeleteSelectedTransactions = () => {
+    if (!selectedTransactionIds.length) return;
+    const idsToDelete = new Set(selectedTransactionIds);
+    persistFinance((prev) => ({
+      ...prev,
+      transactions: prev.transactions.filter((item) => !idsToDelete.has(item.id)),
+    }));
+    setShowDeleteTransactionsConfirm(false);
+    setTransactionSelectionMode(false);
+    setSelectedTransactionIds([]);
   };
 
   const addCategory = () => {
@@ -906,7 +1048,7 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
       open: true,
       mode: "create",
       allocationId: null,
-      draft: { name: "", percent: 0, categoryIds: [] },
+      draft: { name: "", percent: "", categoryIds: [] },
     });
   };
 
@@ -953,8 +1095,40 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
     closeAllocationEditor();
   };
 
-  const removeAllocation = (allocationId) => {
-    persistFinance((prev) => ({ ...prev, allocations: prev.allocations.filter((item) => item.id !== allocationId) }));
+  const startAllocationSelection = () => {
+    setAllocationSelectionMode(true);
+    setSelectedAllocationIds([]);
+  };
+
+  const cancelAllocationSelection = () => {
+    setAllocationSelectionMode(false);
+    setSelectedAllocationIds([]);
+    setShowDeleteAllocationsConfirm(false);
+  };
+
+  const toggleAllocationSelection = (allocationId) => {
+    setSelectedAllocationIds((prev) => (
+      prev.includes(allocationId)
+        ? prev.filter((id) => id !== allocationId)
+        : [...prev, allocationId]
+    ));
+  };
+
+  const openDeleteSelectedAllocationsConfirm = () => {
+    if (!selectedAllocationIds.length) return;
+    setShowDeleteAllocationsConfirm(true);
+  };
+
+  const confirmDeleteSelectedAllocations = () => {
+    if (!selectedAllocationIds.length) return;
+    const idsToDelete = new Set(selectedAllocationIds);
+    persistFinance((prev) => ({
+      ...prev,
+      allocations: prev.allocations.filter((item) => !idsToDelete.has(item.id)),
+    }));
+    setShowDeleteAllocationsConfirm(false);
+    setAllocationSelectionMode(false);
+    setSelectedAllocationIds([]);
   };
 
   const importStatement = async () => {
@@ -1211,6 +1385,22 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
                 </p>
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", width: isCompact ? "100%" : "auto" }}>
+                {!transactionSelectionMode && (
+                  <button title="Selecionar para apagar" aria-label="Selecionar para apagar" style={{ ...bsm({ padding: "10px 12px", flex: isCompact ? 1 : "unset", color: RD, borderColor: RD + "35" }) }} onClick={startTransactionSelection}>
+                    Selecionar
+                  </button>
+                )}
+                {transactionSelectionMode && (
+                  <>
+                    <span style={{ fontSize: 12, color: T2, alignSelf: "center" }}>{selectedTransactionIds.length} selecionado(s)</span>
+                    <button title="Cancelar seleção" aria-label="Cancelar seleção" style={{ ...bsm({ padding: "10px 12px", flex: isCompact ? 1 : "unset", color: T2, borderColor: BD2 }) }} onClick={cancelTransactionSelection}>
+                      Cancelar
+                    </button>
+                    <button title="Apagar selecionados" aria-label="Apagar selecionados" style={{ ...bsm({ padding: "10px 12px", flex: isCompact ? 1 : "unset", color: RD, borderColor: RD + "35", opacity: selectedTransactionIds.length ? 1 : 0.55 }) }} onClick={openDeleteSelectedTransactionsConfirm} disabled={!selectedTransactionIds.length}>
+                      Apagar selecionados
+                    </button>
+                  </>
+                )}
                 <button title="Upload de extrato" aria-label="Upload de extrato" style={{ ...bsm({ padding: "10px 12px", flex: isCompact ? 1 : "unset", color: BL, borderColor: BL + "30" }) }} onClick={() => setShowImportModal(true)}>
                   ⤴
                 </button>
@@ -1262,7 +1452,7 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
               <p style={{ color: T3, fontSize: 13 }}>{monthTransactions.length === 0 ? "Ainda não existem movimentos registados para este mês." : "Nenhum movimento corresponde aos filtros actuais."}</p>
             ) : isCompact ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {paginatedMonthTransactions.map((item) => <TransactionCard key={item.id} item={{ ...item, amount: convertFromChf(item.amount) }} category={categoriesById[item.categoryId]} accountName={accountNameById[item.accountId]} categories={normalizedFinanceData.categories} bankAccounts={bankAccounts} isEditing={editingTransactionId === item.id} draft={editingDraft} onEdit={() => startInlineEdit(item)} onDraftChange={onInlineDraftChange} onSaveEdit={saveInlineEdit} onCancelEdit={cancelInlineEdit} onDelete={() => deleteTransaction(item.id)} currencyLabel={baseCurrency} />)}
+                {paginatedMonthTransactions.map((item) => <TransactionCard key={item.id} item={{ ...item, amount: convertFromChf(item.amount) }} category={categoriesById[item.categoryId]} accountName={accountNameById[item.accountId]} categories={normalizedFinanceData.categories} bankAccounts={bankAccounts} isEditing={!transactionSelectionMode && editingTransactionId === item.id} draft={editingDraft} onEdit={() => startInlineEdit(item)} onDraftChange={onInlineDraftChange} onSaveEdit={saveInlineEdit} onCancelEdit={cancelInlineEdit} currencyLabel={baseCurrency} selectionMode={transactionSelectionMode} selected={selectedTransactionIds.includes(item.id)} onToggleSelect={() => toggleTransactionSelection(item.id)} />)}
                 <PaginationControls page={currentTransactionsPage} pageCount={transactionPageCount} onPageChange={setTransactionsPage} compact />
               </div>
             ) : (
@@ -1280,10 +1470,11 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
                     {paginatedMonthTransactions.map((item) => {
                       const category = categoriesById[item.categoryId];
                       const color = category?.color || T2;
-                      const isEditingRow = editingTransactionId === item.id;
+                      const isEditingRow = !transactionSelectionMode && editingTransactionId === item.id;
+                      const isSelectedRow = selectedTransactionIds.includes(item.id);
                       const rowCategories = normalizedFinanceData.categories.filter((entry) => entry.kind === editingDraft.kind);
                       return (
-                        <tr key={item.id} style={{ borderBottom: "1px solid " + BD, background: isEditingRow ? BL + "10" : "transparent" }}>
+                        <tr key={item.id} style={{ borderBottom: "1px solid " + BD, background: isEditingRow ? BL + "10" : isSelectedRow ? G + "12" : "transparent" }}>
                           <td style={{ padding: "11px 8px", color: T2, fontSize: 12 }}>
                             {isEditingRow ? <input style={inp} type="date" value={editingDraft.date} onChange={(e) => onInlineDraftChange("date", e.target.value)} /> : item.date}
                           </td>
@@ -1323,10 +1514,21 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
                                   <button title="Guardar" aria-label="Guardar" onClick={saveInlineEdit} style={bsm({ color: G, borderColor: G + "30" })}>✓</button>
                                   <button title="Cancelar" aria-label="Cancelar" onClick={cancelInlineEdit} style={bsm({ color: T2, borderColor: BD2 })}>↩</button>
                                 </>
+                              ) : transactionSelectionMode ? (
+                                <button
+                                  title={isSelectedRow ? "Remover da seleção" : "Selecionar para apagar"}
+                                  aria-label={isSelectedRow ? "Remover da seleção" : "Selecionar para apagar"}
+                                  onClick={() => toggleTransactionSelection(item.id)}
+                                  style={bsm({
+                                    color: isSelectedRow ? G : T2,
+                                    borderColor: isSelectedRow ? G + "35" : BD2,
+                                    background: isSelectedRow ? G + "1f" : "transparent",
+                                  })}>
+                                  {isSelectedRow ? "Selecionado" : "Selecionar"}
+                                </button>
                               ) : (
                                 <>
-                                  <button title="Editar" aria-label="Editar" onClick={() => startInlineEdit(item)} style={bsm({ color: BL, borderColor: BL + "30" })}>✎</button>
-                                  <button title="Eliminar" aria-label="Eliminar" onClick={() => deleteTransaction(item.id)} style={bsm({ color: RD, borderColor: RD + "30" })}>🗑</button>
+                                  <button title="Editar" aria-label="Editar" onClick={() => startInlineEdit(item)} style={bsm({ color: BL, borderColor: BL + "30" })}>Editar</button>
                                 </>
                               )}
                             </div>
@@ -1344,7 +1546,17 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
 
           {showTransactionModal && <TransactionFormModal isCompact={isCompact} transactionForm={transactionForm} setTransactionForm={setTransactionForm} kindOptions={kindOptions} bankAccounts={bankAccounts} onSave={saveTransaction} onClose={closeTransactionModal} />}
           {showImportModal && <StatementImportModal isCompact={isCompact} fileInputRef={fileInputRef} uploadFiles={uploadFiles} setUploadFiles={setUploadFiles} uploadError={uploadError} uploadResult={uploadResult} uploading={uploading} onImport={importStatement} onClose={closeImportModal} currencyLabel={baseCurrency} />}
-          {deleteTransactionId !== null && <DeleteTransactionConfirmModal isCompact={isCompact} onCancel={cancelDeleteTransaction} onConfirm={confirmDeleteTransaction} />}
+          {showDeleteTransactionsConfirm && (
+            <DeleteTransactionsConfirmModal
+              isCompact={isCompact}
+              transactions={monthTransactions
+                .filter((item) => selectedTransactionIds.includes(item.id))
+                .map((item) => ({ ...item, amount: convertFromChf(item.amount) }))}
+              currencyLabel={baseCurrency}
+              onCancel={() => setShowDeleteTransactionsConfirm(false)}
+              onConfirm={confirmDeleteSelectedTransactions}
+            />
+          )}
         </>
       )}
 
@@ -1378,12 +1590,34 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
                 </div>
                 <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                   <span style={{ fontSize: 12, color: allocationPercentTotal === 100 ? GR : allocationPercentTotal > 100 ? RD : G }}>Total configurado: {allocationPercentTotal.toFixed(1)}%</span>
+                  {!allocationSelectionMode && (
+                    <button title="Selecionar para apagar" aria-label="Selecionar para apagar" style={bsm({ color: RD, borderColor: RD + "35", minWidth: 34, padding: "6px 10px" })} onClick={startAllocationSelection}>Selecionar</button>
+                  )}
+                  {allocationSelectionMode && (
+                    <>
+                      <span style={{ fontSize: 12, color: T2 }}>{selectedAllocationIds.length} selecionada(s)</span>
+                      <button title="Cancelar seleção" aria-label="Cancelar seleção" style={bsm({ color: T2, borderColor: BD2, minWidth: 34, padding: "6px 10px" })} onClick={cancelAllocationSelection}>Cancelar</button>
+                      <button title="Apagar selecionadas" aria-label="Apagar selecionadas" style={bsm({ color: RD, borderColor: RD + "35", minWidth: 34, padding: "6px 10px", opacity: selectedAllocationIds.length ? 1 : 0.55 })} onClick={openDeleteSelectedAllocationsConfirm} disabled={!selectedAllocationIds.length}>Apagar selecionadas</button>
+                    </>
+                  )}
                   <button title="Nova alocação" aria-label="Nova alocação" style={bsm({ color: G, borderColor: G + "30", minWidth: 34, padding: "6px 10px" })} onClick={openCreateAllocationEditor}>+</button>
                 </div>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 {normalizedFinanceData.allocations.map((allocation) => (
-                  <AllocationCard key={allocation.id} allocation={allocation} incomeTotal={displayTotals.income} actualAmount={displayAllocationMap[allocation.id] || 0} categoriesById={categoriesById} compact={isCompact} onEdit={() => openEditAllocationEditor(allocation)} onRemove={() => removeAllocation(allocation.id)} currencyLabel={baseCurrency} />
+                  <AllocationCard
+                    key={allocation.id}
+                    allocation={allocation}
+                    incomeTotal={displayTotals.income}
+                    actualAmount={displayAllocationMap[allocation.id] || 0}
+                    categoriesById={categoriesById}
+                    compact={isCompact}
+                    onEdit={() => openEditAllocationEditor(allocation)}
+                    currencyLabel={baseCurrency}
+                    selectionMode={allocationSelectionMode}
+                    selected={selectedAllocationIds.includes(allocation.id)}
+                    onToggleSelect={() => toggleAllocationSelection(allocation.id)}
+                  />
                 ))}
               </div>
             </div>
@@ -1455,6 +1689,14 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
               onSave={saveAllocationEditor}
               savingLabel={allocationEditorState.mode === "create" ? "Criar alocação" : "Guardar alterações"}
               currencyLabel={baseCurrency}
+            />
+          )}
+          {showDeleteAllocationsConfirm && (
+            <DeleteAllocationsConfirmModal
+              isCompact={isCompact}
+              allocations={normalizedFinanceData.allocations.filter((item) => selectedAllocationIds.includes(item.id))}
+              onCancel={() => setShowDeleteAllocationsConfirm(false)}
+              onConfirm={confirmDeleteSelectedAllocations}
             />
           )}
         </>
