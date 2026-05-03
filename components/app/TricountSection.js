@@ -38,7 +38,27 @@ function normalizeName(user, fallback = "Utilizador") {
   return user?.name || user?.email || fallback;
 }
 
-export default function TricountSection({ prefillExpenseRequest, onConsumePrefillExpense }) {
+function createExpenseItem(partial = {}) {
+  return {
+    id: `expense-item-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
+    description: partial.description || "",
+    amount: partial.amount ? String(partial.amount) : "",
+    currency: partial.currency || "CHF",
+    expenseDate: partial.expenseDate || new Date().toISOString().slice(0, 10),
+    note: partial.note || "",
+  };
+}
+
+function buildEqualPercentageMap(memberIds) {
+  const percentMap = {};
+  const equalPercent = memberIds.length ? 100 / memberIds.length : 0;
+  memberIds.forEach((id) => {
+    percentMap[id] = Number(equalPercent.toFixed(2));
+  });
+  return percentMap;
+}
+
+export default function TricountSection({ prefillExpenseRequest, onConsumePrefillExpense, currentUserId = null }) {
   const [overview, setOverview] = useState({ groups: [], pendingInvites: [] });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -52,13 +72,10 @@ export default function TricountSection({ prefillExpenseRequest, onConsumePrefil
   });
 
   const [expenseForm, setExpenseForm] = useState({
-    description: "",
-    amount: "",
-    currency: "CHF",
     paidByUserId: "",
     splitMode: "equal",
-    expenseDate: new Date().toISOString().slice(0, 10),
   });
+  const [expenseItems, setExpenseItems] = useState([createExpenseItem()]);
   const [participantIds, setParticipantIds] = useState([]);
   const [manualShares, setManualShares] = useState({});
   const [percentageShares, setPercentageShares] = useState({});
@@ -75,6 +92,14 @@ export default function TricountSection({ prefillExpenseRequest, onConsumePrefil
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [showSettlementModal, setShowSettlementModal] = useState(false);
   const [pendingDeleteExpenseId, setPendingDeleteExpenseId] = useState(null);
+  const [expenseHistoryPage, setExpenseHistoryPage] = useState(1);
+  const [expenseHistoryFilters, setExpenseHistoryFilters] = useState({
+    search: "",
+    payerUserId: "all",
+    splitMode: "all",
+    dateFrom: "",
+    dateTo: "",
+  });
 
   const loadOverview = useCallback(async () => {
     setLoading(true);
@@ -104,7 +129,49 @@ export default function TricountSection({ prefillExpenseRequest, onConsumePrefil
     overview.groups.find((group) => Number(group.id) === Number(selectedGroupId)) || null
   ), [overview.groups, selectedGroupId]);
 
+  const expensesPerPage = 8;
+  const expenseHistory = currentGroup?.expenses || [];
+  const filteredExpenseHistory = useMemo(() => {
+    const searchTerm = String(expenseHistoryFilters.search || "").trim().toLowerCase();
+
+    return expenseHistory.filter((expense) => {
+      if (expenseHistoryFilters.payerUserId !== "all" && String(expense.paid_by_user_id) !== String(expenseHistoryFilters.payerUserId)) {
+        return false;
+      }
+
+      if (expenseHistoryFilters.splitMode !== "all" && String(expense.split_mode || "") !== String(expenseHistoryFilters.splitMode)) {
+        return false;
+      }
+
+      if (expenseHistoryFilters.dateFrom && String(expense.expense_date || "") < expenseHistoryFilters.dateFrom) {
+        return false;
+      }
+
+      if (expenseHistoryFilters.dateTo && String(expense.expense_date || "") > expenseHistoryFilters.dateTo) {
+        return false;
+      }
+
+      if (!searchTerm) return true;
+
+      const payerName = normalizeName(expense.payer, "Membro");
+      const description = String(expense.description || "");
+      const currency = String(expense.currency || "");
+
+      return `${description} ${payerName} ${currency}`.toLowerCase().includes(searchTerm);
+    });
+  }, [expenseHistory, expenseHistoryFilters]);
+  const expenseHistoryPageCount = Math.max(1, Math.ceil(filteredExpenseHistory.length / expensesPerPage));
+  const currentExpenseHistoryPage = Math.min(Math.max(expenseHistoryPage, 1), expenseHistoryPageCount);
+  const paginatedExpenseHistory = useMemo(() => {
+    const start = (currentExpenseHistoryPage - 1) * expensesPerPage;
+    return filteredExpenseHistory.slice(start, start + expensesPerPage);
+  }, [filteredExpenseHistory, currentExpenseHistoryPage]);
+
   const members = currentGroup?.members || [];
+  const preferredPayerUserId = useMemo(() => {
+    const matchedMember = members.find((member) => Number(member.user_id) === Number(currentUserId));
+    return matchedMember ? String(matchedMember.user_id) : null;
+  }, [members, currentUserId]);
 
   useEffect(() => {
     if (!currentGroup) return;
@@ -112,9 +179,12 @@ export default function TricountSection({ prefillExpenseRequest, onConsumePrefil
     setParticipantIds(allMemberIds);
     setExpenseForm((prev) => ({
       ...prev,
-      paidByUserId: String(prev.paidByUserId || allMemberIds[0] || ""),
-      currency: currentGroup.base_currency || "CHF",
+      paidByUserId: String(prev.paidByUserId || preferredPayerUserId || allMemberIds[0] || ""),
     }));
+    setExpenseItems((prev) => prev.map((item) => ({
+      ...item,
+      currency: item.currency || currentGroup.base_currency || "CHF",
+    })));
     setSettlementForm((prev) => ({
       ...prev,
       fromUserId: String(prev.fromUserId || allMemberIds[0] || ""),
@@ -122,13 +192,8 @@ export default function TricountSection({ prefillExpenseRequest, onConsumePrefil
       currency: currentGroup.base_currency || "CHF",
     }));
 
-    const percentMap = {};
-    const equalPercent = allMemberIds.length ? 100 / allMemberIds.length : 0;
-    allMemberIds.forEach((id) => {
-      percentMap[id] = Number(equalPercent.toFixed(2));
-    });
-    setPercentageShares(percentMap);
-  }, [currentGroup, members]);
+    setPercentageShares(buildEqualPercentageMap(allMemberIds));
+  }, [currentGroup, members, preferredPayerUserId]);
 
   useEffect(() => {
     if (!prefillExpenseRequest?.requestId || loading) return;
@@ -142,22 +207,62 @@ export default function TricountSection({ prefillExpenseRequest, onConsumePrefil
 
     const targetGroup = overview.groups.find((group) => Number(group.id) === Number(selectedGroupId)) || overview.groups[0];
     const targetMemberIds = (targetGroup?.members || []).map((member) => Number(member.user_id));
+    const prefillMovements = Array.isArray(prefillExpenseRequest.movements)
+      ? prefillExpenseRequest.movements
+      : [prefillExpenseRequest];
+    const nextItems = prefillMovements
+      .filter(Boolean)
+      .map((movement) => createExpenseItem({
+        description: movement.description || "Despesa partilhada",
+        amount: movement.amount ? String(movement.amount) : "",
+        currency: movement.currency || targetGroup?.base_currency || "CHF",
+        expenseDate: movement.expenseDate || new Date().toISOString().slice(0, 10),
+        note: movement.note || "",
+      }));
 
     setSelectedGroupId(targetGroup?.id || null);
     setParticipantIds(targetMemberIds);
+    setPercentageShares(buildEqualPercentageMap(targetMemberIds));
+    setManualShares({});
     setExpenseForm((prev) => ({
       ...prev,
-      description: prefillExpenseRequest.description || prev.description,
-      amount: prefillExpenseRequest.amount ? String(prefillExpenseRequest.amount) : prev.amount,
-      currency: prefillExpenseRequest.currency || targetGroup?.base_currency || prev.currency,
-      expenseDate: prefillExpenseRequest.expenseDate || prev.expenseDate,
-      paidByUserId: String(targetMemberIds[0] || prev.paidByUserId || ""),
+      paidByUserId: String(preferredPayerUserId || targetMemberIds[0] || prev.paidByUserId || ""),
       splitMode: "equal",
     }));
+    setExpenseItems(nextItems.length ? nextItems : [createExpenseItem({ currency: targetGroup?.base_currency || "CHF" })]);
     setShowExpenseModal(true);
     setError("");
     onConsumePrefillExpense?.();
-  }, [prefillExpenseRequest, overview.groups, selectedGroupId, loading, onConsumePrefillExpense]);
+  }, [prefillExpenseRequest, overview.groups, selectedGroupId, loading, onConsumePrefillExpense, preferredPayerUserId]);
+
+  useEffect(() => {
+    setExpenseHistoryPage(1);
+  }, [selectedGroupId]);
+
+  useEffect(() => {
+    setExpenseHistoryPage(1);
+  }, [expenseHistoryFilters]);
+
+  useEffect(() => {
+    if (expenseHistoryPage !== currentExpenseHistoryPage) {
+      setExpenseHistoryPage(currentExpenseHistoryPage);
+    }
+  }, [expenseHistoryPage, currentExpenseHistoryPage]);
+
+  const openExpenseModal = () => {
+    if (!currentGroup) return;
+    const allMemberIds = members.map((member) => Number(member.user_id));
+    setParticipantIds(allMemberIds);
+    setPercentageShares(buildEqualPercentageMap(allMemberIds));
+    setManualShares({});
+    setExpenseForm((prev) => ({
+      ...prev,
+      paidByUserId: String(preferredPayerUserId || allMemberIds[0] || prev.paidByUserId || ""),
+      splitMode: "equal",
+    }));
+    setExpenseItems([createExpenseItem({ currency: currentGroup.base_currency || "CHF" })]);
+    setShowExpenseModal(true);
+  };
 
   const userById = useMemo(() => {
     const map = {};
@@ -189,6 +294,23 @@ export default function TricountSection({ prefillExpenseRequest, onConsumePrefil
     });
   };
 
+  const addExpenseItem = () => {
+    setExpenseItems((prev) => [...prev, createExpenseItem({ currency: currentGroup?.base_currency || "CHF" })]);
+  };
+
+  const removeExpenseItem = (itemId) => {
+    setExpenseItems((prev) => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((item) => item.id !== itemId);
+    });
+  };
+
+  const updateExpenseItem = (itemId, field, value) => {
+    setExpenseItems((prev) => prev.map((item) => (
+      item.id === itemId ? { ...item, [field]: value } : item
+    )));
+  };
+
   const submitInvite = async () => {
     if (!inviteForm.email.trim()) {
       setError("Indica o email do utilizador a convidar.");
@@ -218,24 +340,45 @@ export default function TricountSection({ prefillExpenseRequest, onConsumePrefil
   const submitExpense = async () => {
     if (!currentGroup) return;
 
+    const normalizedItems = expenseItems
+      .map((item) => ({
+        description: String(item.description || "").trim(),
+        amount: Number(String(item.amount).replace(",", ".")),
+        currency: item.currency || currentGroup.base_currency || "CHF",
+        expenseDate: item.expenseDate || new Date().toISOString().slice(0, 10),
+      }))
+      .filter((item) => item.description || item.amount > 0);
+
+    if (!normalizedItems.length) {
+      setError("Adiciona pelo menos uma despesa válida para guardar.");
+      return;
+    }
+
+    if (normalizedItems.some((item) => !Number.isFinite(item.amount) || item.amount <= 0)) {
+      setError("Todas as despesas devem ter um valor superior a zero.");
+      return;
+    }
+
     await withBusy(async () => {
-      await apiJson("/api/shared/expense", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          groupId: currentGroup.id,
-          description: expenseForm.description,
-          amount: Number(String(expenseForm.amount).replace(",", ".")),
-          currency: expenseForm.currency,
-          paidByUserId: Number(expenseForm.paidByUserId),
-          splitMode: expenseForm.splitMode,
-          participantIds,
-          percentageShares,
-          manualShares,
-          expenseDate: expenseForm.expenseDate,
-        }),
-      });
-      setExpenseForm((prev) => ({ ...prev, description: "", amount: "" }));
+      for (const item of normalizedItems) {
+        await apiJson("/api/shared/expense", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            groupId: currentGroup.id,
+            description: item.description,
+            amount: item.amount,
+            currency: item.currency,
+            paidByUserId: Number(expenseForm.paidByUserId),
+            splitMode: expenseForm.splitMode,
+            participantIds,
+            percentageShares,
+            manualShares,
+            expenseDate: item.expenseDate,
+          }),
+        });
+      }
+      setExpenseItems([createExpenseItem({ currency: currentGroup.base_currency || "CHF" })]);
       setShowExpenseModal(false);
     });
   };
@@ -347,7 +490,7 @@ export default function TricountSection({ prefillExpenseRequest, onConsumePrefil
               Balanço em tempo real ({currentGroup.base_currency}) · {currentGroup.name}
             </h3>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-              <button style={btnG} onClick={() => setShowExpenseModal(true)}>Adicionar despesa</button>
+              <button style={btnG} onClick={openExpenseModal}>Adicionar despesa</button>
               <button style={{ ...btn({ borderColor: BL + "35", color: BL }) }} onClick={() => setShowSettlementModal(true)}>Liquidar dívida</button>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
@@ -367,9 +510,70 @@ export default function TricountSection({ prefillExpenseRequest, onConsumePrefil
 
           <div style={{ ...card(), padding: "16px" }}>
             <h3 style={{ color: T, fontSize: 16, marginBottom: 10 }}>Histórico de despesas</h3>
-            {(currentGroup.expenses || []).length === 0 && <p style={{ color: T3, fontSize: 13 }}>Ainda não há despesas neste grupo.</p>}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8, marginBottom: 10 }}>
+              <div>
+                <span style={lbl}>Pesquisar</span>
+                <input
+                  style={inp}
+                  value={expenseHistoryFilters.search}
+                  onChange={(event) => setExpenseHistoryFilters((prev) => ({ ...prev, search: event.target.value }))}
+                  placeholder="Descrição ou pagador"
+                />
+              </div>
+              <div>
+                <span style={lbl}>Pagador</span>
+                <select
+                  style={inp}
+                  value={expenseHistoryFilters.payerUserId}
+                  onChange={(event) => setExpenseHistoryFilters((prev) => ({ ...prev, payerUserId: event.target.value }))}>
+                  <option value="all">Todos</option>
+                  {members.map((member) => (
+                    <option key={member.user_id} value={String(member.user_id)}>{normalizeName(member.user, "Membro")}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <span style={lbl}>Divisão</span>
+                <select
+                  style={inp}
+                  value={expenseHistoryFilters.splitMode}
+                  onChange={(event) => setExpenseHistoryFilters((prev) => ({ ...prev, splitMode: event.target.value }))}>
+                  <option value="all">Todas</option>
+                  <option value="equal">Igual</option>
+                  <option value="percentage">Percentagem</option>
+                  <option value="manual">Manual</option>
+                </select>
+              </div>
+              <div>
+                <span style={lbl}>Data início</span>
+                <input
+                  style={inp}
+                  type="date"
+                  value={expenseHistoryFilters.dateFrom}
+                  onChange={(event) => setExpenseHistoryFilters((prev) => ({ ...prev, dateFrom: event.target.value }))}
+                />
+              </div>
+              <div>
+                <span style={lbl}>Data fim</span>
+                <input
+                  style={inp}
+                  type="date"
+                  value={expenseHistoryFilters.dateTo}
+                  onChange={(event) => setExpenseHistoryFilters((prev) => ({ ...prev, dateTo: event.target.value }))}
+                />
+              </div>
+              <div style={{ display: "flex", alignItems: "end" }}>
+                <button
+                  style={{ ...bsm({ width: "100%", color: T2, borderColor: BD2 }) }}
+                  onClick={() => setExpenseHistoryFilters({ search: "", payerUserId: "all", splitMode: "all", dateFrom: "", dateTo: "" })}>
+                  Limpar
+                </button>
+              </div>
+            </div>
+            {expenseHistory.length === 0 && <p style={{ color: T3, fontSize: 13 }}>Ainda não há despesas neste grupo.</p>}
+            {expenseHistory.length > 0 && filteredExpenseHistory.length === 0 && <p style={{ color: T3, fontSize: 13 }}>Nenhuma despesa corresponde aos filtros atuais.</p>}
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {(currentGroup.expenses || []).map((expense) => (
+              {paginatedExpenseHistory.map((expense) => (
                 <div key={expense.id} style={{ border: "1px solid " + BD2, borderRadius: 12, padding: "10px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 8 }}>
                     <p style={{ color: T, fontSize: 13, fontWeight: 600 }}>{expense.description}</p>
@@ -394,6 +598,27 @@ export default function TricountSection({ prefillExpenseRequest, onConsumePrefil
                 </div>
               ))}
             </div>
+            {filteredExpenseHistory.length > expensesPerPage && (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+                <p style={{ color: T3, fontSize: 12 }}>
+                  Página {currentExpenseHistoryPage} de {expenseHistoryPageCount} · {filteredExpenseHistory.length} filtrada(s) de {expenseHistory.length}
+                </p>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    disabled={currentExpenseHistoryPage <= 1}
+                    onClick={() => setExpenseHistoryPage((prev) => Math.max(1, prev - 1))}
+                    style={bsm({ color: T2, borderColor: BD2, opacity: currentExpenseHistoryPage <= 1 ? 0.55 : 1 })}>
+                    Anterior
+                  </button>
+                  <button
+                    disabled={currentExpenseHistoryPage >= expenseHistoryPageCount}
+                    onClick={() => setExpenseHistoryPage((prev) => Math.min(expenseHistoryPageCount, prev + 1))}
+                    style={bsm({ color: G, borderColor: G + "40", opacity: currentExpenseHistoryPage >= expenseHistoryPageCount ? 0.55 : 1 })}>
+                    Seguinte
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div style={{ ...card(), padding: "16px" }}>
@@ -441,30 +666,53 @@ export default function TricountSection({ prefillExpenseRequest, onConsumePrefil
 
       {showExpenseModal && currentGroup && (
         <Modal title={`Adicionar despesa · ${currentGroup.name}`} onClose={() => setShowExpenseModal(false)} wide>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
-            <div>
-              <span style={lbl}>Descrição</span>
-              <input style={inp} value={expenseForm.description} onChange={(event) => setExpenseForm((prev) => ({ ...prev, description: event.target.value }))} placeholder="Jantar, supermercado..." />
-            </div>
-            <div>
-              <span style={lbl}>Valor</span>
-              <input style={inp} type="number" min="0" step="0.01" value={expenseForm.amount} onChange={(event) => setExpenseForm((prev) => ({ ...prev, amount: event.target.value }))} />
-            </div>
-            <div>
-              <span style={lbl}>Moeda</span>
-              <select style={inp} value={expenseForm.currency} onChange={(event) => setExpenseForm((prev) => ({ ...prev, currency: event.target.value }))}>
-                {CURRENCIES.map((currency) => <option key={currency} value={currency}>{currency}</option>)}
-              </select>
-            </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+            <p style={{ color: T2, fontSize: 12 }}>{expenseItems.length} movimento(s) preparado(s) para partilha</p>
+            <button disabled={busy} style={bsm({ color: G, borderColor: G + "45" })} onClick={addExpenseItem}>+ Movimento</button>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {expenseItems.map((expenseItem, index) => (
+              <div key={expenseItem.id} style={{ border: "1px solid " + BD2, borderRadius: 12, padding: "10px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <p style={{ color: T, fontSize: 12, fontWeight: 600 }}>Movimento {index + 1}</p>
+                  <button
+                    disabled={busy || expenseItems.length <= 1}
+                    onClick={() => removeExpenseItem(expenseItem.id)}
+                    style={bsm({ color: RD, borderColor: RD + "40", opacity: expenseItems.length > 1 ? 1 : 0.55 })}>
+                    Remover
+                  </button>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
+                  <div>
+                    <span style={lbl}>Descrição</span>
+                    <input style={inp} value={expenseItem.description} onChange={(event) => updateExpenseItem(expenseItem.id, "description", event.target.value)} placeholder="Jantar, supermercado..." />
+                  </div>
+                  <div>
+                    <span style={lbl}>Valor</span>
+                    <input style={inp} type="number" min="0" step="0.01" value={expenseItem.amount} onChange={(event) => updateExpenseItem(expenseItem.id, "amount", event.target.value)} />
+                  </div>
+                  <div>
+                    <span style={lbl}>Moeda</span>
+                    <select style={inp} value={expenseItem.currency} onChange={(event) => updateExpenseItem(expenseItem.id, "currency", event.target.value)}>
+                      {CURRENCIES.map((currency) => <option key={currency} value={currency}>{currency}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <span style={lbl}>Data</span>
+                    <input style={inp} type="date" value={expenseItem.expenseDate} onChange={(event) => updateExpenseItem(expenseItem.id, "expenseDate", event.target.value)} />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10, marginTop: 10 }}>
             <div>
               <span style={lbl}>Quem pagou</span>
               <select style={inp} value={expenseForm.paidByUserId} onChange={(event) => setExpenseForm((prev) => ({ ...prev, paidByUserId: event.target.value }))}>
                 {members.map((member) => <option key={member.user_id} value={member.user_id}>{normalizeName(member.user, "Membro")}</option>)}
               </select>
-            </div>
-            <div>
-              <span style={lbl}>Data</span>
-              <input style={inp} type="date" value={expenseForm.expenseDate} onChange={(event) => setExpenseForm((prev) => ({ ...prev, expenseDate: event.target.value }))} />
             </div>
             <div>
               <span style={lbl}>Tipo de divisão</span>
@@ -534,7 +782,9 @@ export default function TricountSection({ prefillExpenseRequest, onConsumePrefil
             </div>
           )}
 
-          <button disabled={busy} style={{ ...btnG, marginTop: 14 }} onClick={submitExpense}>Guardar despesa</button>
+          <button disabled={busy} style={{ ...btnG, marginTop: 14 }} onClick={submitExpense}>
+            {expenseItems.length > 1 ? `Guardar ${expenseItems.length} despesas` : "Guardar despesa"}
+          </button>
         </Modal>
       )}
 

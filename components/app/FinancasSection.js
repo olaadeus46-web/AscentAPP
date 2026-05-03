@@ -61,6 +61,7 @@ const DEFAULT_TRANSACTION_FILTERS = {
   categoryId: "all",
   source: "all",
 };
+const FINANCE_UI_STATE_KEY = "finance_ui_state_v1";
 
 function currentMonthValue() {
   return new Date().toISOString().slice(0, 7);
@@ -86,6 +87,19 @@ function normalizeAmount(value) {
 
 function clampPage(page, pageCount) {
   return Math.min(Math.max(page, 1), Math.max(pageCount, 1));
+}
+
+function loadPersistedFinanceUiState() {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(FINANCE_UI_STATE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 function TabButton({ active, label, onClick }) {
@@ -633,10 +647,14 @@ function DeleteTransactionsConfirmModal({ isCompact, transactions, currencyLabel
 }
 
 export default function FinancasSection({ portfolios, financeData, saveFinanceData, baseCurrency = "CHF", onUpdateBaseCurrency, fx = {}, onAddSharedExpenseFromMovement }) {
+  const persistedUiState = useMemo(() => loadPersistedFinanceUiState(), []);
   const normalizedFinanceData = useMemo(() => normalizeFinanceData(financeData || createDefaultFinanceData()), [financeData]);
-  const [selectedMonth, setSelectedMonth] = useState(currentMonthValue());
-  const [selectedAccountId, setSelectedAccountId] = useState("all");
-  const [activeTab, setActiveTab] = useState("overview");
+  const [selectedMonth, setSelectedMonth] = useState(() => persistedUiState?.selectedMonth || currentMonthValue());
+  const [selectedAccountId, setSelectedAccountId] = useState(() => persistedUiState?.selectedAccountId || "all");
+  const [activeTab, setActiveTab] = useState(() => {
+    const nextTab = persistedUiState?.activeTab;
+    return FINANCE_TABS.some((tab) => tab.key === nextTab) ? nextTab : "overview";
+  });
   const [isCompact, setIsCompact] = useState(false);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -650,7 +668,10 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
   const [allocationSelectionMode, setAllocationSelectionMode] = useState(false);
   const [selectedAllocationIds, setSelectedAllocationIds] = useState([]);
   const [showDeleteAllocationsConfirm, setShowDeleteAllocationsConfirm] = useState(false);
-  const [transactionFilters, setTransactionFilters] = useState(DEFAULT_TRANSACTION_FILTERS);
+  const [transactionFilters, setTransactionFilters] = useState(() => ({
+    ...DEFAULT_TRANSACTION_FILTERS,
+    ...(persistedUiState?.transactionFilters || {}),
+  }));
   const [transactionsPage, setTransactionsPage] = useState(1);
   const [comparisonMonths, setComparisonMonths] = useState(6);
   const [comparisonCategoryId, setComparisonCategoryId] = useState("all");
@@ -685,6 +706,13 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
   });
   const fileInputRef = useRef(null);
   const convertFromChf = (value) => toBaseCurrency(value, baseCurrency, fx);
+  const mapTransactionToSharedExpense = (item) => ({
+    description: item.description,
+    amount: convertFromChf(item.amount),
+    currency: baseCurrency,
+    expenseDate: item.date,
+    note: item.notes || "",
+  });
 
   useEffect(() => {
     const checkCompact = () => setIsCompact(window.innerWidth <= 720);
@@ -828,6 +856,9 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
     const start = (currentTransactionsPage - 1) * transactionsPerPage;
     return filteredMonthTransactions.slice(start, start + transactionsPerPage);
   }, [filteredMonthTransactions, currentTransactionsPage, transactionsPerPage]);
+  const selectedExpenseTransactions = useMemo(() => (
+    monthTransactions.filter((item) => selectedTransactionIds.includes(item.id) && item.kind === "expense")
+  ), [monthTransactions, selectedTransactionIds]);
 
   const comparisonChartData = useMemo(() => {
     const months = [];
@@ -889,6 +920,19 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
       setShowDeleteTransactionsConfirm(false);
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const uiState = {
+      selectedMonth,
+      selectedAccountId,
+      activeTab,
+      transactionFilters,
+    };
+
+    window.localStorage.setItem(FINANCE_UI_STATE_KEY, JSON.stringify(uiState));
+  }, [selectedMonth, selectedAccountId, activeTab, transactionFilters]);
 
   const persistFinance = (updater) => {
     saveFinanceData((prev) => normalizeFinanceData(typeof updater === "function" ? updater(normalizeFinanceData(prev || createDefaultFinanceData())) : updater));
@@ -1021,6 +1065,16 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
     setShowDeleteTransactionsConfirm(false);
     setTransactionSelectionMode(false);
     setSelectedTransactionIds([]);
+  };
+
+  const shareSelectedTransactions = () => {
+    if (!selectedExpenseTransactions.length) return;
+    onAddSharedExpenseFromMovement?.({
+      movements: selectedExpenseTransactions.map(mapTransactionToSharedExpense),
+    });
+    setTransactionSelectionMode(false);
+    setSelectedTransactionIds([]);
+    setShowDeleteTransactionsConfirm(false);
   };
 
   const addCategory = () => {
@@ -1400,7 +1454,7 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", width: isCompact ? "100%" : "auto" }}>
                 {!transactionSelectionMode && (
-                  <button title="Selecionar para apagar" aria-label="Selecionar para apagar" style={{ ...bsm({ padding: "10px 12px", flex: isCompact ? 1 : "unset", color: RD, borderColor: RD + "35" }) }} onClick={startTransactionSelection}>
+                  <button title="Selecionar movimentos" aria-label="Selecionar movimentos" style={{ ...bsm({ padding: "10px 12px", flex: isCompact ? 1 : "unset", color: RD, borderColor: RD + "35" }) }} onClick={startTransactionSelection}>
                     Selecionar
                   </button>
                 )}
@@ -1409,6 +1463,9 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
                     <span style={{ fontSize: 12, color: T2, alignSelf: "center" }}>{selectedTransactionIds.length} selecionado(s)</span>
                     <button title="Cancelar seleção" aria-label="Cancelar seleção" style={{ ...bsm({ padding: "10px 12px", flex: isCompact ? 1 : "unset", color: T2, borderColor: BD2 }) }} onClick={cancelTransactionSelection}>
                       Cancelar
+                    </button>
+                    <button title="Partilhar selecionados" aria-label="Partilhar selecionados" style={{ ...bsm({ padding: "10px 12px", flex: isCompact ? 1 : "unset", color: G, borderColor: G + "40", opacity: selectedExpenseTransactions.length ? 1 : 0.55 }) }} onClick={shareSelectedTransactions} disabled={!selectedExpenseTransactions.length}>
+                      Partilhar selecionados ({selectedExpenseTransactions.length})
                     </button>
                     <button title="Apagar selecionados" aria-label="Apagar selecionados" style={{ ...bsm({ padding: "10px 12px", flex: isCompact ? 1 : "unset", color: RD, borderColor: RD + "35", opacity: selectedTransactionIds.length ? 1 : 0.55 }) }} onClick={openDeleteSelectedTransactionsConfirm} disabled={!selectedTransactionIds.length}>
                       Apagar selecionados
@@ -1482,13 +1539,7 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
                     selectionMode={transactionSelectionMode}
                     selected={selectedTransactionIds.includes(item.id)}
                     onToggleSelect={() => toggleTransactionSelection(item.id)}
-                    onAddToShared={() => onAddSharedExpenseFromMovement?.({
-                      description: item.description,
-                      amount: convertFromChf(item.amount),
-                      currency: baseCurrency,
-                      expenseDate: item.date,
-                      note: item.notes || "",
-                    })}
+                    onAddToShared={() => onAddSharedExpenseFromMovement?.(mapTransactionToSharedExpense(item))}
                   />
                 ))}
                 <PaginationControls page={currentTransactionsPage} pageCount={transactionPageCount} onPageChange={setTransactionsPage} compact />
@@ -1571,13 +1622,7 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
                                     <button
                                       title="Conta conjunta"
                                       aria-label="Conta conjunta"
-                                      onClick={() => onAddSharedExpenseFromMovement?.({
-                                        description: item.description,
-                                        amount: convertFromChf(item.amount),
-                                        currency: baseCurrency,
-                                        expenseDate: item.date,
-                                        note: item.notes || "",
-                                      })}
+                                      onClick={() => onAddSharedExpenseFromMovement?.(mapTransactionToSharedExpense(item))}
                                       style={bsm({ color: G, borderColor: G + "40" })}>
                                       Partilhar
                                     </button>

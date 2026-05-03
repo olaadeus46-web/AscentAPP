@@ -213,15 +213,29 @@ export default function App() {
     setCalendarSlotPrefill(null);
   }, []);
 
-  const openTricountExpenseFromMovement = useCallback((movement) => {
+  const openTricountExpenseFromMovement = useCallback((movementOrBatch) => {
+    const receivedMovements = Array.isArray(movementOrBatch)
+      ? movementOrBatch
+      : Array.isArray(movementOrBatch?.movements)
+        ? movementOrBatch.movements
+        : [movementOrBatch];
+
+    const movements = receivedMovements
+      .filter(Boolean)
+      .map((movement) => ({
+        description: movement?.description || "Despesa partilhada",
+        amount: Number(movement?.amount) || 0,
+        currency: movement?.currency || baseCurrency,
+        expenseDate: movement?.expenseDate || movement?.date || new Date().toISOString().slice(0, 10),
+        note: movement?.note || "",
+      }));
+
+    if (!movements.length) return;
+
     setSection("tricount");
     setTricountExpensePrefill({
       requestId: Date.now() + Math.floor(Math.random() * 1000),
-      description: movement?.description || "Despesa partilhada",
-      amount: Number(movement?.amount) || 0,
-      currency: movement?.currency || baseCurrency,
-      expenseDate: movement?.expenseDate || movement?.date || new Date().toISOString().slice(0, 10),
-      note: movement?.note || "",
+      movements,
     });
   }, [baseCurrency]);
 
@@ -329,6 +343,7 @@ export default function App() {
               <TricountSection
                 prefillExpenseRequest={tricountExpensePrefill}
                 onConsumePrefillExpense={consumeTricountExpensePrefill}
+                currentUserId={user?.id}
               />
             )}
             {section === "ideias" && <IdeiasSection ideas={ideas} saveIdeas={saveIdeas} />}
