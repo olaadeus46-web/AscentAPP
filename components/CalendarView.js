@@ -85,6 +85,7 @@ function SlotModal({ slot, defaultDate, onSave, onClose, onDelete, isMobile }) {
     notes: "", recurring: "none",
   };
   const [form, setForm] = useState(slot ? { ...slot } : empty);
+  const [showTimeValidationDialog, setShowTimeValidationDialog] = useState(false);
 
   const RECURRING = [
     { key: "none",    label: "Sem repetição" },
@@ -96,7 +97,7 @@ function SlotModal({ slot, defaultDate, onSave, onClose, onDelete, isMobile }) {
   const save = () => {
     if (!form.title.trim()) return;
     if (parseTime(form.endTime) <= parseTime(form.startTime)) {
-      alert("A hora de fim deve ser depois da hora de início.");
+      setShowTimeValidationDialog(true);
       return;
     }
     onSave({ ...form, id: form.id || Date.now() });
@@ -200,12 +201,23 @@ function SlotModal({ slot, defaultDate, onSave, onClose, onDelete, isMobile }) {
           </div>
         </div>
       </div>
+
+      {showTimeValidationDialog && (
+        <ConfirmDialog
+          title="Intervalo de horas inválido"
+          message="A hora de fim deve ser depois da hora de início."
+          confirmLabel="Percebi"
+          hideCancel
+          onConfirm={() => setShowTimeValidationDialog(false)}
+          onCancel={() => setShowTimeValidationDialog(false)}
+        />
+      )}
     </div>
   );
 }
 
 // ─── CONFIRM DELETE DIALOG ────────────────────────────────────────────────────
-function ConfirmDialog({ title, message, onConfirm, onCancel }) {
+function ConfirmDialog({ title, message, onConfirm, onCancel, confirmLabel = "Eliminar", hideCancel = false }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.7)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
       onClick={e => e.target === e.currentTarget && onCancel()}>
@@ -213,8 +225,8 @@ function ConfirmDialog({ title, message, onConfirm, onCancel }) {
         <p style={{ fontFamily: "'Playfair Display',serif", fontSize: 17, color: T, marginBottom: 10 }}>{title}</p>
         <p style={{ fontSize: 13, color: T2, lineHeight: 1.6, marginBottom: 22 }}>{message}</p>
         <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={onCancel} style={{ ...btn({ flex: 1, padding: "9px 0" }) }}>Cancelar</button>
-          <button onClick={onConfirm} style={{ ...btn({ flex: 1, padding: "9px 0", background: RD + "18", color: RD, borderColor: RD + "40" }) }}>Eliminar</button>
+          {!hideCancel && <button onClick={onCancel} style={{ ...btn({ flex: 1, padding: "9px 0" }) }}>Cancelar</button>}
+          <button onClick={onConfirm} style={{ ...btn({ flex: 1, padding: "9px 0", background: RD + "18", color: RD, borderColor: RD + "40" }) }}>{confirmLabel}</button>
         </div>
       </div>
     </div>

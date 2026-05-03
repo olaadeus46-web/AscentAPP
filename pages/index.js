@@ -4,6 +4,7 @@ import CalendarView from "../components/CalendarView";
 import HomeScreen from "../components/app/HomeScreen";
 import PatrimonioSection from "../components/app/PatrimonioSection";
 import IdeiasSection from "../components/app/IdeiasSection";
+import TricountSection from "../components/app/TricountSection";
 import ObjetivosSection from "../components/app/ObjetivosSection";
 import FinancasSection from "../components/app/FinancasSection";
 import {
@@ -37,6 +38,7 @@ export default function App() {
   const [calendarSlots, setCalendarSlots] = useState([]);
   const [financeData, setFinanceData] = useState(null);
   const [calendarSlotPrefill, setCalendarSlotPrefill] = useState(null);
+  const [tricountExpensePrefill, setTricountExpensePrefill] = useState(null);
   const [startDate, setStartDate] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [user, setUser] = useState(null);
@@ -211,10 +213,26 @@ export default function App() {
     setCalendarSlotPrefill(null);
   }, []);
 
+  const openTricountExpenseFromMovement = useCallback((movement) => {
+    setSection("tricount");
+    setTricountExpensePrefill({
+      requestId: Date.now() + Math.floor(Math.random() * 1000),
+      description: movement?.description || "Despesa partilhada",
+      amount: Number(movement?.amount) || 0,
+      currency: movement?.currency || baseCurrency,
+      expenseDate: movement?.expenseDate || movement?.date || new Date().toISOString().slice(0, 10),
+      note: movement?.note || "",
+    });
+  }, [baseCurrency]);
+
+  const consumeTricountExpensePrefill = useCallback(() => {
+    setTricountExpensePrefill(null);
+  }, []);
+
   const NAV = [
     { key: "patrimonio", label: "Patrimônio", icon: "💰" },
     { key: "financas", label: "Finanças", icon: "📊" },
-    { key: "ideias", label: "Ideias", icon: "💡" },
+    { key: "tricount", label: "Partilhado", icon: "👥" },
     { key: "objetivos", label: "Objetivos", icon: "🎯" },
     { key: "calendario", label: "Calendário", icon: "📅" },
   ];
@@ -270,7 +288,7 @@ export default function App() {
         <div style={{ fontFamily: APP_FONT, background: `radial-gradient(circle at 18% -12%, #25335a 0%, ${S2} 34%, ${BG} 78%)`, minHeight: "100dvh", color: T, paddingBottom: isMobile ? "calc(68px + env(safe-area-inset-bottom, 0px))" : "env(safe-area-inset-bottom, 0px)" }}>
           <style>{`*{box-sizing:border-box;margin:0;padding:0;}html,body{min-height:100%;background:${BG};}body{padding:0;margin:0;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}input[type=number]::-webkit-inner-spin-button{opacity:.3;}select option{background:${S2};color:${T};}button{-webkit-tap-highlight-color:transparent;}*{scrollbar-width:thin;scrollbar-color:${BD2} transparent;}::-webkit-scrollbar{height:8px;width:8px;}::-webkit-scrollbar-thumb{background:${BD2};border-radius:99px;}@media (max-width: 900px){input,select,textarea{font-size:16px !important;}}`}</style>
 
-          <div style={{ background: "rgba(12,17,32,.72)", backdropFilter: "blur(16px)", borderBottom: "1px solid " + BD, position: "sticky", top: 0, zIndex: 50 }}>
+          <div style={{ background: "rgba(12,17,32,.72)", backdropFilter: "blur(16px)", borderBottom: "1px solid " + BD, position: isMobile ? "fixed" : "sticky", top: 0, left: 0, right: 0, zIndex: 80, paddingTop: "env(safe-area-inset-top, 0px)" }}>
             <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "10px 14px" : "0 24px", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 58, gap: 12, flexWrap: "nowrap" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <img src="/apple-touch-icon.png" alt="A" style={{ width: 44, height: 44, borderRadius: 12, display: "block", flexShrink: 0 }} />
@@ -294,9 +312,25 @@ export default function App() {
             </div>
           </div>
 
-          <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "16px 14px 20px" : "28px 24px" }}>
+          <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "calc(16px + 58px + env(safe-area-inset-top, 0px)) 14px 20px" : "28px 24px" }}>
             {section === "patrimonio" && <PatrimonioSection portfolios={portfolios} savePortfolios={savePortfolios} prices={prices} setPrices={setPrices} fx={fx} setFx={setFx} nwHistory={nwHistory} saveNwHistory={saveNwHistory} baseCurrency={baseCurrency} onUpdateBaseCurrency={updateBaseCurrency} financeData={financeData} />}
-            {section === "financas" && <FinancasSection portfolios={portfolios} financeData={financeData} saveFinanceData={saveFinanceData} baseCurrency={baseCurrency} onUpdateBaseCurrency={updateBaseCurrency} fx={fx} />}
+            {section === "financas" && (
+              <FinancasSection
+                portfolios={portfolios}
+                financeData={financeData}
+                saveFinanceData={saveFinanceData}
+                baseCurrency={baseCurrency}
+                onUpdateBaseCurrency={updateBaseCurrency}
+                fx={fx}
+                onAddSharedExpenseFromMovement={openTricountExpenseFromMovement}
+              />
+            )}
+            {section === "tricount" && (
+              <TricountSection
+                prefillExpenseRequest={tricountExpensePrefill}
+                onConsumePrefillExpense={consumeTricountExpensePrefill}
+              />
+            )}
             {section === "ideias" && <IdeiasSection ideas={ideas} saveIdeas={saveIdeas} />}
             {section === "objetivos" && <ObjetivosSection goals={goals} saveGoals={saveGoals} onAddCalendarTask={addGoalSuggestionToCalendar} />}
             {section === "calendario" && <CalendarView slots={calendarSlots} onSaveSlots={saveCalendarSlots} newSlotPrefill={calendarSlotPrefill} onConsumeNewSlotPrefill={consumeCalendarSlotPrefill} />}

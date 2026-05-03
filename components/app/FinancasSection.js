@@ -260,6 +260,20 @@ function AllocationCard({
 }) {
   const targetAmount = incomeTotal * ((Number(allocation.percent) || 0) / 100);
   const progressMax = Math.max(targetAmount, actualAmount, 1);
+  const remainingToTarget = Math.max(targetAmount - actualAmount, 0);
+  const overspentAmount = Math.max(actualAmount - targetAmount, 0);
+  const hasTarget = targetAmount > 0;
+  const isOverTarget = hasTarget && overspentAmount > 0;
+  const isOnTarget = hasTarget && Math.abs(targetAmount - actualAmount) < 0.01;
+  const diffLabel = !hasTarget
+    ? "Meta não definida"
+    : isOverTarget
+      ? "Excedido"
+      : isOnTarget
+        ? "Meta atingida"
+        : "Falta gastar";
+  const diffValue = !hasTarget ? 0 : isOverTarget ? overspentAmount : remainingToTarget;
+  const diffColor = !hasTarget ? T2 : isOverTarget ? RD : isOnTarget ? GR : BL;
   const linkedCategories = allocation.categoryIds
     .map((id) => categoriesById[id])
     .filter(Boolean);
@@ -294,6 +308,10 @@ function AllocationCard({
         <span style={{ fontSize: 12, color: actualAmount > targetAmount && targetAmount > 0 ? RD : GR }}>Actual: {currencyLabel} {fmtF(actualAmount)}</span>
       </div>
       <ProgressBar value={actualAmount} max={progressMax} color={actualAmount > targetAmount && targetAmount > 0 ? RD : G} height={6} />
+      <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 11, color: diffColor, fontWeight: 700 }}>{diffLabel}: {currencyLabel} {fmtF(diffValue)}</span>
+        {hasTarget && <span style={{ fontSize: 11, color: T3 }}>{Math.min((actualAmount / targetAmount) * 100, 999).toFixed(1)}% da meta</span>}
+      </div>
       {linkedCategories.length > 0 && <p style={{ fontSize: 11, color: T3, marginTop: 10 }}>Ligado a: {linkedCategories.map((item) => item.name).join(", ")}</p>}
       {linkedCategories.length === 0 && <p style={{ fontSize: 11, color: T3, marginTop: 10 }}>Sem categorias ligadas.</p>}
     </div>
@@ -387,6 +405,7 @@ function TransactionCard({
   selectionMode = false,
   selected = false,
   onToggleSelect,
+  onAddToShared,
 }) {
   const color = category?.color || T2;
   const draftCategories = categories.filter((entry) => entry.kind === (draft?.kind || "expense"));
@@ -434,6 +453,9 @@ function TransactionCard({
           ) : (
             <>
               <button title="Editar" aria-label="Editar" onClick={onEdit} style={bsm({ color: BL, borderColor: BL + "30" })}>Editar</button>
+              {item.kind === "expense" && (
+                <button title="Conta conjunta" aria-label="Conta conjunta" onClick={onAddToShared} style={bsm({ color: G, borderColor: G + "40" })}>Partilhar</button>
+              )}
             </>
           )}
         </div>
@@ -610,7 +632,7 @@ function DeleteTransactionsConfirmModal({ isCompact, transactions, currencyLabel
   );
 }
 
-export default function FinancasSection({ portfolios, financeData, saveFinanceData, baseCurrency = "CHF", onUpdateBaseCurrency, fx = {} }) {
+export default function FinancasSection({ portfolios, financeData, saveFinanceData, baseCurrency = "CHF", onUpdateBaseCurrency, fx = {}, onAddSharedExpenseFromMovement }) {
   const normalizedFinanceData = useMemo(() => normalizeFinanceData(financeData || createDefaultFinanceData()), [financeData]);
   const [selectedMonth, setSelectedMonth] = useState(currentMonthValue());
   const [selectedAccountId, setSelectedAccountId] = useState("all");
@@ -670,14 +692,6 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
     window.addEventListener("resize", checkCompact);
     return () => window.removeEventListener("resize", checkCompact);
   }, []);
-
-  useEffect(() => {
-    if (!isCompact || activeTab !== "transactions") return;
-    setTransactionFilters((prev) => {
-      const hasActiveFilters = prev.search || prev.kind !== "all" || prev.categoryId !== "all" || prev.source !== "all";
-      return hasActiveFilters ? DEFAULT_TRANSACTION_FILTERS : prev;
-    });
-  }, [isCompact, activeTab]);
 
   const bankAccounts = useMemo(() => {
     const direct = portfolios.filter((item) => ACCOUNT_TYPES.has(item.type));
@@ -1410,8 +1424,7 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
               </div>
             </div>
 
-            {!isCompact && (
-              <div style={{ display: "grid", gridTemplateColumns: "minmax(220px,1.2fr) repeat(3,minmax(150px,1fr)) auto", gap: 10, marginBottom: 16, alignItems: "end" }}>
+            <div style={{ display: "grid", gridTemplateColumns: isCompact ? "1fr" : "minmax(220px,1.2fr) repeat(3,minmax(150px,1fr)) auto", gap: 10, marginBottom: 16, alignItems: "end" }}>
                 <div>
                   <span style={lbl}>Pesquisar</span>
                   <input
@@ -1446,13 +1459,38 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
                   ⟲
                 </button>
               </div>
-            )}
 
             {filteredMonthTransactions.length === 0 ? (
               <p style={{ color: T3, fontSize: 13 }}>{monthTransactions.length === 0 ? "Ainda não existem movimentos registados para este mês." : "Nenhum movimento corresponde aos filtros actuais."}</p>
             ) : isCompact ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {paginatedMonthTransactions.map((item) => <TransactionCard key={item.id} item={{ ...item, amount: convertFromChf(item.amount) }} category={categoriesById[item.categoryId]} accountName={accountNameById[item.accountId]} categories={normalizedFinanceData.categories} bankAccounts={bankAccounts} isEditing={!transactionSelectionMode && editingTransactionId === item.id} draft={editingDraft} onEdit={() => startInlineEdit(item)} onDraftChange={onInlineDraftChange} onSaveEdit={saveInlineEdit} onCancelEdit={cancelInlineEdit} currencyLabel={baseCurrency} selectionMode={transactionSelectionMode} selected={selectedTransactionIds.includes(item.id)} onToggleSelect={() => toggleTransactionSelection(item.id)} />)}
+                {paginatedMonthTransactions.map((item) => (
+                  <TransactionCard
+                    key={item.id}
+                    item={{ ...item, amount: convertFromChf(item.amount) }}
+                    category={categoriesById[item.categoryId]}
+                    accountName={accountNameById[item.accountId]}
+                    categories={normalizedFinanceData.categories}
+                    bankAccounts={bankAccounts}
+                    isEditing={!transactionSelectionMode && editingTransactionId === item.id}
+                    draft={editingDraft}
+                    onEdit={() => startInlineEdit(item)}
+                    onDraftChange={onInlineDraftChange}
+                    onSaveEdit={saveInlineEdit}
+                    onCancelEdit={cancelInlineEdit}
+                    currencyLabel={baseCurrency}
+                    selectionMode={transactionSelectionMode}
+                    selected={selectedTransactionIds.includes(item.id)}
+                    onToggleSelect={() => toggleTransactionSelection(item.id)}
+                    onAddToShared={() => onAddSharedExpenseFromMovement?.({
+                      description: item.description,
+                      amount: convertFromChf(item.amount),
+                      currency: baseCurrency,
+                      expenseDate: item.date,
+                      note: item.notes || "",
+                    })}
+                  />
+                ))}
                 <PaginationControls page={currentTransactionsPage} pageCount={transactionPageCount} onPageChange={setTransactionsPage} compact />
               </div>
             ) : (
@@ -1529,6 +1567,21 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
                               ) : (
                                 <>
                                   <button title="Editar" aria-label="Editar" onClick={() => startInlineEdit(item)} style={bsm({ color: BL, borderColor: BL + "30" })}>Editar</button>
+                                  {item.kind === "expense" && (
+                                    <button
+                                      title="Conta conjunta"
+                                      aria-label="Conta conjunta"
+                                      onClick={() => onAddSharedExpenseFromMovement?.({
+                                        description: item.description,
+                                        amount: convertFromChf(item.amount),
+                                        currency: baseCurrency,
+                                        expenseDate: item.date,
+                                        note: item.notes || "",
+                                      })}
+                                      style={bsm({ color: G, borderColor: G + "40" })}>
+                                      Partilhar
+                                    </button>
+                                  )}
                                 </>
                               )}
                             </div>

@@ -28,7 +28,7 @@ export default async function handler(req, res) {
 
   try {
     const passwordHash = await hashPassword(password);
-    const user = createUser({ name, email, passwordHash });
+    const user = await createUser({ name, email, passwordHash });
     const token = signAuthToken(user);
     setAuthCookie(res, token);
     return res.status(201).json({ user: sanitizeUser(user) });

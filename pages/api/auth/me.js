@@ -17,6 +17,9 @@ export default async function handler(req, res) {
     });
   } catch (error) {
     console.error("[auth/me]", error);
+    if (error?.code === "42501") {
+      return res.status(500).json({ error: "Permissões da base de dados inválidas para sessão." });
+    }
     return res.status(500).json({ error: "Erro ao carregar sessão." });
   }
 }

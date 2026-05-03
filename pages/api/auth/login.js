@@ -29,6 +29,9 @@ export default async function handler(req, res) {
     return res.status(200).json({ user: sanitizeUser(user) });
   } catch (error) {
     console.error("[auth/login]", error);
+    if (error?.code === "42501") {
+      return res.status(500).json({ error: "Permissões da base de dados inválidas para autenticação." });
+    }
     return res.status(500).json({ error: "Erro ao autenticar utilizador." });
   }
 }
