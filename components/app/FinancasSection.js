@@ -185,49 +185,87 @@ function MonthlyComparisonChart({ rows, categoryLabel, compact, currencyLabel })
   );
 }
 
-function PaginationControls({ page, pageCount, onPageChange, compact = false }) {
+function PaginationControls({ page, pageCount, onPageChange, compact = false, totalItems }) {
   if (pageCount <= 1) return null;
 
+  if (compact) {
+    return (
+      <div style={{ marginTop: 18 }}>
+        <p style={{ fontSize: 12, color: T3, textAlign: "center", marginBottom: 12 }}>
+          Página {page} de {pageCount}{totalItems != null ? " · " + totalItems + " movimentos" : ""}
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <button
+            title="Página anterior" aria-label="Página anterior"
+            onClick={() => onPageChange(page - 1)}
+            disabled={page <= 1}
+            style={{ ...bsm({ padding: "14px 0", fontSize: 15, fontWeight: 600 }), opacity: page <= 1 ? 0.35 : 1, textAlign: "center" }}>
+            ← Anterior
+          </button>
+          <button
+            title="Página seguinte" aria-label="Página seguinte"
+            onClick={() => onPageChange(page + 1)}
+            disabled={page >= pageCount}
+            style={{ ...bsm({ padding: "14px 0", fontSize: 15, fontWeight: 600 }), opacity: page >= pageCount ? 0.35 : 1, textAlign: "center" }}>
+            Próxima →
+          </button>
+        </div>
+        {pageCount > 2 && (
+          <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 10, flexWrap: "wrap" }}>
+            {Array.from({ length: pageCount }, (_, i) => i + 1).map((value) => (
+              <button
+                key={value}
+                onClick={() => onPageChange(value)}
+                style={{
+                  width: 32, height: 32, borderRadius: 999, border: "1px solid " + (value === page ? G : BD2),
+                  background: value === page ? G : "transparent",
+                  color: value === page ? "#111" : T2,
+                  fontSize: 12, fontWeight: value === page ? 700 : 400, cursor: "pointer",
+                  flexShrink: 0,
+                }}>
+                {value}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   const pages = [];
-  const start = Math.max(1, page - 1);
-  const end = Math.min(pageCount, page + 1);
-  for (let index = start; index <= end; index += 1) {
-    pages.push(index);
-  }
-
-  if (!pages.includes(1)) {
-    pages.unshift(1);
-  }
-
-  if (!pages.includes(pageCount)) {
-    pages.push(pageCount);
-  }
-
+  const start = Math.max(1, page - 2);
+  const end = Math.min(pageCount, page + 2);
+  for (let index = start; index <= end; index += 1) pages.push(index);
+  if (!pages.includes(1)) pages.unshift(1);
+  if (!pages.includes(pageCount)) pages.push(pageCount);
   const uniquePages = pages.filter((value, index) => pages.indexOf(value) === index);
 
   return (
-    <div style={{ display: "flex", justifyContent: compact ? "stretch" : "space-between", alignItems: compact ? "stretch" : "center", gap: 10, flexWrap: "wrap", marginTop: 16, flexDirection: compact ? "column" : "row" }}>
-      <p style={{ fontSize: 12, color: T3 }}>Página {page} de {pageCount}</p>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", width: compact ? "100%" : "auto" }}>
-        <button title="Página anterior" aria-label="Página anterior" onClick={() => onPageChange(page - 1)} disabled={page <= 1} style={{ ...bsm({ padding: "8px 12px", flex: compact ? 1 : "unset" }), opacity: page <= 1 ? 0.45 : 1 }}>
-          ←
-        </button>
-        {uniquePages.map((value) => (
-          <button
-            key={value}
-            onClick={() => onPageChange(value)}
-            style={{
-              ...bsm({ padding: "8px 12px", minWidth: 42, flex: compact ? 1 : "unset" }),
-              background: value === page ? G : "transparent",
-              color: value === page ? "#111" : T2,
-              border: "1px solid " + (value === page ? G : BD2),
-            }}>
-            {value}
-          </button>
-        ))}
-        <button title="Página seguinte" aria-label="Página seguinte" onClick={() => onPageChange(page + 1)} disabled={page >= pageCount} style={{ ...bsm({ padding: "8px 12px", flex: compact ? 1 : "unset" }), opacity: page >= pageCount ? 0.45 : 1 }}>
-          →
-        </button>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
+      <p style={{ fontSize: 12, color: T3 }}>Página {page} de {pageCount}{totalItems != null ? " · " + totalItems + " movimentos" : ""}</p>
+      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <button title="Página anterior" aria-label="Página anterior" onClick={() => onPageChange(page - 1)} disabled={page <= 1} style={{ ...bsm({ padding: "8px 12px" }), opacity: page <= 1 ? 0.45 : 1 }}>←</button>
+        {uniquePages.map((value, idx) => {
+          const prev = uniquePages[idx - 1];
+          const showEllipsis = prev != null && value - prev > 1;
+          return (
+            <React.Fragment key={value}>
+              {showEllipsis && <span style={{ color: T3, fontSize: 13, padding: "0 2px" }}>…</span>}
+              <button
+                onClick={() => onPageChange(value)}
+                style={{
+                  ...bsm({ padding: "8px 12px", minWidth: 38 }),
+                  background: value === page ? G : "transparent",
+                  color: value === page ? "#111" : T2,
+                  border: "1px solid " + (value === page ? G : BD2),
+                  fontWeight: value === page ? 700 : 400,
+                }}>
+                {value}
+              </button>
+            </React.Fragment>
+          );
+        })}
+        <button title="Página seguinte" aria-label="Página seguinte" onClick={() => onPageChange(page + 1)} disabled={page >= pageCount} style={{ ...bsm({ padding: "8px 12px" }), opacity: page >= pageCount ? 0.45 : 1 }}>→</button>
       </div>
     </div>
   );
@@ -270,6 +308,7 @@ function AllocationCard({
   selectionMode = false,
   selected = false,
   onToggleSelect,
+  onViewMovements,
 }) {
   const targetAmount = incomeTotal * ((Number(allocation.percent) || 0) / 100);
   const progressMax = Math.max(targetAmount, actualAmount, 1);
@@ -313,7 +352,10 @@ function AllocationCard({
             {selected ? "Selecionado" : "Selecionar"}
           </button>
         ) : (
-          <button onClick={onEdit} title="Editar alocação" aria-label="Editar alocação" style={bsm({ color: BL, borderColor: BL + "30", minWidth: 34, padding: "6px 10px" })}>Editar</button>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={onViewMovements} title="Ver movimentos" aria-label="Ver movimentos" style={bsm({ color: T2, borderColor: BD2, padding: "6px 10px" })}>Ver</button>
+            <button onClick={onEdit} title="Editar alocação" aria-label="Editar alocação" style={bsm({ color: BL, borderColor: BL + "30", padding: "6px 10px" })}>Editar</button>
+          </div>
         )}
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 8, flexWrap: "wrap" }}>
@@ -397,6 +439,93 @@ function AllocationEditorModal({
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 18, gap: 8, flexWrap: "wrap" }}>
         <button title="Cancelar" aria-label="Cancelar" style={bsm({ width: isCompact ? "100%" : "auto" })} onClick={onCancel}>×</button>
         <button title={savingLabel} aria-label={savingLabel} style={{ ...btnG, width: isCompact ? "100%" : "auto" }} onClick={onSave}>✓</button>
+      </div>
+    </Modal>
+  );
+}
+
+function AllocationMovementsModal({ allocation, transactions, categoriesById, accountNameById, currencyLabel, onClose, isCompact }) {
+  const [page, setPage] = useState(1);
+  const perPage = isCompact ? 5 : 8;
+
+  const movements = useMemo(() => {
+    const catSet = new Set(allocation.categoryIds);
+    return transactions
+      .filter((item) => item.kind === "expense" && catSet.has(item.categoryId))
+      .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  }, [allocation.categoryIds, transactions]);
+
+  const pageCount = Math.max(1, Math.ceil(movements.length / perPage));
+  const currentPage = Math.min(Math.max(page, 1), pageCount);
+  const paginated = movements.slice((currentPage - 1) * perPage, currentPage * perPage);
+
+  return (
+    <Modal title={allocation.name + " — Movimentos"} onClose={onClose} wide>
+      <p style={{ fontSize: 12, color: T3, marginBottom: 14 }}>
+        {movements.length} movimento(s) ligados a esta alocação
+      </p>
+      {movements.length === 0 ? (
+        <p style={{ fontSize: 13, color: T3 }}>Sem movimentos registados para as categorias desta alocação.</p>
+      ) : (
+        <>
+          {isCompact ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {paginated.map((item) => {
+                const category = categoriesById[item.categoryId];
+                const color = category?.color || T2;
+                return (
+                  <div key={item.id} style={{ padding: "12px 14px", borderRadius: 14, background: S2, border: "1px solid " + BD }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <p style={{ fontSize: 13, color: T, fontWeight: 600, marginBottom: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.description}</p>
+                        <p style={{ fontSize: 11, color: T3 }}>{item.date} · {accountNameById[item.accountId] || "—"}</p>
+                      </div>
+                      <p style={{ fontSize: 13, color: RD, fontWeight: 700, flexShrink: 0 }}>-{currencyLabel} {fmtF(item.amount)}</p>
+                    </div>
+                    {category && (
+                      <div style={{ marginTop: 8 }}>
+                        <span style={{ fontSize: 11, color, border: "1px solid " + color + "40", background: color + "15", padding: "3px 8px", borderRadius: 999 }}>{category.name}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid " + BD }}>
+                    {["Data", "Conta", "Descrição", "Categoria", "Montante"].map((h) => (
+                      <th key={h} style={{ padding: "9px 8px", textAlign: "left", color: T2, fontSize: 11, fontWeight: 600 }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginated.map((item) => {
+                    const category = categoriesById[item.categoryId];
+                    const color = category?.color || T2;
+                    return (
+                      <tr key={item.id} style={{ borderBottom: "1px solid " + BD }}>
+                        <td style={{ padding: "10px 8px", color: T2, fontSize: 12 }}>{item.date}</td>
+                        <td style={{ padding: "10px 8px", color: T, fontSize: 12 }}>{accountNameById[item.accountId] || "—"}</td>
+                        <td style={{ padding: "10px 8px", color: T, fontSize: 13 }}>{item.description}</td>
+                        <td style={{ padding: "10px 8px" }}>
+                          {category && <span style={{ fontSize: 11, color, border: "1px solid " + color + "40", background: color + "15", padding: "4px 8px", borderRadius: 999 }}>{category.name}</span>}
+                        </td>
+                        <td style={{ padding: "10px 8px", color: RD, fontSize: 13, fontWeight: 700 }}>-{currencyLabel} {fmtF(item.amount)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <PaginationControls page={currentPage} pageCount={pageCount} onPageChange={setPage} compact={isCompact} totalItems={movements.length} />
+        </>
+      )}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 18 }}>
+        <button title="Fechar" aria-label="Fechar" style={bsm({})} onClick={onClose}>Fechar</button>
       </div>
     </Modal>
   );
@@ -696,6 +825,7 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
   const [categoryForm, setCategoryForm] = useState({ name: "", kind: "expense" });
   const [uploadFiles, setUploadFiles] = useState([]);
   const [uploadCurrency, setUploadCurrency] = useState("CHF");
+  const [allocationMovementsId, setAllocationMovementsId] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [uploadResult, setUploadResult] = useState(null);
@@ -857,7 +987,7 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
         .includes(searchTerm);
     });
   }, [monthTransactions, transactionFilters, categoriesById, accountNameById]);
-  const transactionsPerPage = isCompact ? 6 : 8;
+  const transactionsPerPage = isCompact ? 10 : 8;
   const transactionPageCount = Math.max(1, Math.ceil(filteredMonthTransactions.length / transactionsPerPage));
   const currentTransactionsPage = clampPage(transactionsPage, transactionPageCount);
   const paginatedMonthTransactions = useMemo(() => {
@@ -1583,7 +1713,7 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
                     onAddToShared={() => onAddSharedExpenseFromMovement?.(mapTransactionToSharedExpense(item))}
                   />
                 ))}
-                <PaginationControls page={currentTransactionsPage} pageCount={transactionPageCount} onPageChange={setTransactionsPage} compact />
+                <PaginationControls page={currentTransactionsPage} pageCount={transactionPageCount} onPageChange={setTransactionsPage} compact totalItems={filteredMonthTransactions.length} />
               </div>
             ) : (
               <>
@@ -1678,7 +1808,7 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
                   </tbody>
                 </table>
                 </div>
-                <PaginationControls page={currentTransactionsPage} pageCount={transactionPageCount} onPageChange={setTransactionsPage} />
+                <PaginationControls page={currentTransactionsPage} pageCount={transactionPageCount} onPageChange={setTransactionsPage} totalItems={filteredMonthTransactions.length} />
               </>
             )}
           </div>
@@ -1756,6 +1886,7 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
                     selectionMode={allocationSelectionMode}
                     selected={selectedAllocationIds.includes(allocation.id)}
                     onToggleSelect={() => toggleAllocationSelection(allocation.id)}
+                    onViewMovements={() => setAllocationMovementsId(allocation.id)}
                   />
                 ))}
               </div>
@@ -1813,6 +1944,21 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
             </div>
           )}
 
+          {allocationMovementsId && (() => {
+            const alloc = normalizedFinanceData.allocations.find((item) => item.id === allocationMovementsId);
+            if (!alloc) return null;
+            return (
+              <AllocationMovementsModal
+                allocation={alloc}
+                transactions={monthTransactions.map((item) => ({ ...item, amount: convertFromChf(item.amount) }))}
+                categoriesById={categoriesById}
+                accountNameById={accountNameById}
+                currencyLabel={baseCurrency}
+                isCompact={isCompact}
+                onClose={() => setAllocationMovementsId(null)}
+              />
+            );
+          })()}
           {allocationEditorState.open && (
             <AllocationEditorModal
               isCompact={isCompact}
