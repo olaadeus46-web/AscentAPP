@@ -25,7 +25,6 @@ import {
   toBaseCurrency,
 } from "./shared";
 import {
-  buildTransactionFingerprint,
   createDefaultFinanceData,
   findCategoryByName,
   monthKeyFromDate,
@@ -454,8 +453,8 @@ function TransactionCard({
             </>
           ) : selectionMode ? (
             <button
-              title={selected ? "Remover da seleção" : "Selecionar para apagar"}
-              aria-label={selected ? "Remover da seleção" : "Selecionar para apagar"}
+              title={selected ? "Remover da seleção" : "Selecionar movimento"}
+              aria-label={selected ? "Remover da seleção" : "Selecionar movimento"}
               onClick={onToggleSelect}
               style={bsm({
                 color: selected ? G : T2,
@@ -868,6 +867,9 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
   const selectedExpenseTransactions = useMemo(() => (
     monthTransactions.filter((item) => selectedTransactionIds.includes(item.id) && item.kind === "expense")
   ), [monthTransactions, selectedTransactionIds]);
+  const selectedTransactions = useMemo(() => (
+    monthTransactions.filter((item) => selectedTransactionIds.includes(item.id))
+  ), [monthTransactions, selectedTransactionIds]);
 
   const comparisonChartData = useMemo(() => {
     const months = [];
@@ -1037,6 +1039,34 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
     }));
 
     setEditingTransactionId(null);
+  };
+
+  const duplicateSelectedTransactions = () => {
+    if (!selectedTransactions.length) return;
+
+    persistFinance((prev) => {
+      const idsToDuplicate = new Set(selectedTransactions.map((item) => item.id));
+      const now = Date.now();
+      const duplicates = prev.transactions
+        .filter((item) => idsToDuplicate.has(item.id))
+        .map((item, index) => ({
+          ...item,
+          id: now + index + Math.floor(Math.random() * 1000),
+          source: "manual",
+          createdAt: new Date().toISOString(),
+        }));
+
+      if (!duplicates.length) return prev;
+
+      return {
+        ...prev,
+        transactions: [...duplicates, ...prev.transactions],
+      };
+    });
+
+    setTransactionSelectionMode(false);
+    setSelectedTransactionIds([]);
+    setShowDeleteTransactionsConfirm(false);
   };
 
   const startTransactionSelection = () => {
@@ -1290,16 +1320,8 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
         })
         .filter((item) => item.date && item.description && item.amount > 0);
 
-      const existingFingerprints = new Set(normalizedFinanceData.transactions.map(buildTransactionFingerprint));
-      const uniqueImportedTransactions = importedTransactions.filter((item) => {
-        const fingerprint = buildTransactionFingerprint(item);
-        if (existingFingerprints.has(fingerprint)) return false;
-        existingFingerprints.add(fingerprint);
-        return true;
-      });
-
-      if (!uniqueImportedTransactions.length) {
-        setUploadResult({ imported: 0, skipped: importedTransactions.length, preview: [] });
+      if (!importedTransactions.length) {
+        setUploadResult({ imported: 0, skipped: 0, preview: [] });
         setUploading(false);
         return;
       }
@@ -1307,10 +1329,10 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
       persistFinance((prev) => ({
         ...prev,
         categories: [...prev.categories, ...newCategories.filter((item) => !prev.categories.some((existing) => existing.id === item.id))],
-        transactions: [...uniqueImportedTransactions, ...prev.transactions],
+        transactions: [...importedTransactions, ...prev.transactions],
       }));
 
-      setUploadResult({ imported: uniqueImportedTransactions.length, skipped: importedTransactions.length - uniqueImportedTransactions.length, preview: uniqueImportedTransactions.slice(0, 6) });
+      setUploadResult({ imported: importedTransactions.length, skipped: 0, preview: importedTransactions.slice(0, 6) });
       setUploadFiles([]);
       if (fileInputRef.current) fileInputRef.current.value = "";
       setShowImportModal(false);
@@ -1483,6 +1505,9 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
                     <button title="Partilhar selecionados" aria-label="Partilhar selecionados" style={{ ...bsm({ padding: "10px 12px", flex: isCompact ? 1 : "unset", color: G, borderColor: G + "40", opacity: selectedExpenseTransactions.length ? 1 : 0.55 }) }} onClick={shareSelectedTransactions} disabled={!selectedExpenseTransactions.length}>
                       Partilhar selecionados ({selectedExpenseTransactions.length})
                     </button>
+                    <button title="Duplicar selecionados" aria-label="Duplicar selecionados" style={{ ...bsm({ padding: "10px 12px", flex: isCompact ? 1 : "unset", color: BL, borderColor: BL + "30", opacity: selectedTransactions.length ? 1 : 0.55 }) }} onClick={duplicateSelectedTransactions} disabled={!selectedTransactions.length}>
+                      Duplicar selecionados ({selectedTransactions.length})
+                    </button>
                     <button title="Apagar selecionados" aria-label="Apagar selecionados" style={{ ...bsm({ padding: "10px 12px", flex: isCompact ? 1 : "unset", color: RD, borderColor: RD + "35", opacity: selectedTransactionIds.length ? 1 : 0.55 }) }} onClick={openDeleteSelectedTransactionsConfirm} disabled={!selectedTransactionIds.length}>
                       Apagar selecionados
                     </button>
@@ -1621,8 +1646,8 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
                                 </>
                               ) : transactionSelectionMode ? (
                                 <button
-                                  title={isSelectedRow ? "Remover da seleção" : "Selecionar para apagar"}
-                                  aria-label={isSelectedRow ? "Remover da seleção" : "Selecionar para apagar"}
+                                  title={isSelectedRow ? "Remover da seleção" : "Selecionar movimento"}
+                                  aria-label={isSelectedRow ? "Remover da seleção" : "Selecionar movimento"}
                                   onClick={() => toggleTransactionSelection(item.id)}
                                   style={bsm({
                                     color: isSelectedRow ? G : T2,
