@@ -564,12 +564,20 @@ function TransactionFormModal({ isCompact, transactionForm, setTransactionForm, 
   );
 }
 
-function StatementImportModal({ isCompact, fileInputRef, uploadFiles, setUploadFiles, uploadError, uploadResult, uploading, onImport, onClose, currencyLabel }) {
+function StatementImportModal({ isCompact, fileInputRef, uploadFiles, setUploadFiles, uploadCurrency, setUploadCurrency, uploadError, uploadResult, uploading, onImport, onClose, currencyLabel }) {
   return (
     <Modal title="Importar Extrato" onClose={onClose} wide>
       <div style={{ marginBottom: 16 }}>
         <p style={{ fontSize: 12, color: T2, fontWeight: 700, letterSpacing: 1 }}>IMPORTAR EXTRATO</p>
         <p style={{ fontSize: 12, color: T3, marginTop: 4 }}>Envia imagens do extrato bancário para extrair automaticamente as transações do mês.</p>
+      </div>
+      <div style={{ marginBottom: 10 }}>
+        <span style={lbl}>Moeda do extrato</span>
+        <select style={inp} value={uploadCurrency} onChange={(e) => setUploadCurrency(e.target.value)}>
+          <option value="CHF">CHF · Francos suíços</option>
+          <option value="EUR">EUR · Euros</option>
+          <option value="USD">USD · Dólares</option>
+        </select>
       </div>
       <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={(e) => setUploadFiles(Array.from(e.target.files || []))} style={{ ...inp, padding: 10 }} />
       {uploadFiles.length > 0 && <p style={{ fontSize: 12, color: T2, marginTop: 10 }}>{uploadFiles.length} ficheiro(s) preparado(s) para importação.</p>}
@@ -581,7 +589,7 @@ function StatementImportModal({ isCompact, fileInputRef, uploadFiles, setUploadF
           {uploadResult.preview?.length > 0 && uploadResult.preview.map((item) => (
             <div key={item.id} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 11, color: T2, paddingTop: 6 }}>
               <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{item.date} · {item.description}</span>
-              <span>{item.kind === "income" ? "+" : "-"}{currencyLabel} {fmtF(item.amount)}</span>
+              <span>{item.kind === "income" ? "+" : "-"}{item.originalCurrency || currencyLabel} {fmtF(item.originalAmount || item.amount)}</span>
             </div>
           ))}
         </div>
@@ -688,6 +696,7 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
   });
   const [categoryForm, setCategoryForm] = useState({ name: "", kind: "expense" });
   const [uploadFiles, setUploadFiles] = useState([]);
+  const [uploadCurrency, setUploadCurrency] = useState("CHF");
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [uploadResult, setUploadResult] = useState(null);
@@ -944,6 +953,7 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
 
   const closeImportModal = () => {
     setShowImportModal(false);
+    setUploadCurrency("CHF");
     setUploadError("");
   };
 
@@ -1229,6 +1239,7 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
         body: JSON.stringify({
           accountName: accountNameById[accountId] || "Conta bancária",
           selectedMonth,
+          statementCurrency: uploadCurrency || "CHF",
           categories: normalizedFinanceData.categories.map((item) => ({ name: item.name, kind: item.kind })),
           images,
         }),
@@ -1241,9 +1252,12 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
       let categoryIndex = 0;
       const newCategories = [];
       const existingCategories = [...normalizedFinanceData.categories];
+      const statementCurrency = uploadCurrency || "CHF";
       const importedTransactions = (data.transactions || [])
         .map((item, index) => {
           const kind = item.kind === "income" ? "income" : "expense";
+          const originalAmount = normalizeAmount(item.amount);
+          const amountInChf = toChf(originalAmount, statementCurrency, fx) ?? originalAmount;
           const categoryName = String(item.category || (kind === "income" ? "Renda" : "Compras") || "").trim();
           let category = findCategoryByName([...existingCategories, ...newCategories], categoryName, kind);
 
@@ -1264,10 +1278,12 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
             accountId,
             date: item.date,
             description: String(item.description || "Movimento importado").trim(),
-            amount: normalizeAmount(item.amount),
+            amount: amountInChf,
             kind,
             categoryId: category.id,
             notes: String(item.notes || "").trim(),
+            originalAmount,
+            originalCurrency: statementCurrency,
             source: "ai-import",
             createdAt: new Date().toISOString(),
           };
@@ -1643,7 +1659,7 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
           </div>
 
           {showTransactionModal && <TransactionFormModal isCompact={isCompact} transactionForm={transactionForm} setTransactionForm={setTransactionForm} kindOptions={kindOptions} bankAccounts={bankAccounts} onSave={saveTransaction} onClose={closeTransactionModal} />}
-          {showImportModal && <StatementImportModal isCompact={isCompact} fileInputRef={fileInputRef} uploadFiles={uploadFiles} setUploadFiles={setUploadFiles} uploadError={uploadError} uploadResult={uploadResult} uploading={uploading} onImport={importStatement} onClose={closeImportModal} currencyLabel={baseCurrency} />}
+          {showImportModal && <StatementImportModal isCompact={isCompact} fileInputRef={fileInputRef} uploadFiles={uploadFiles} setUploadFiles={setUploadFiles} uploadCurrency={uploadCurrency} setUploadCurrency={setUploadCurrency} uploadError={uploadError} uploadResult={uploadResult} uploading={uploading} onImport={importStatement} onClose={closeImportModal} currencyLabel={baseCurrency} />}
           {showDeleteTransactionsConfirm && (
             <DeleteTransactionsConfirmModal
               isCompact={isCompact}

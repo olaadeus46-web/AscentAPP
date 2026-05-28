@@ -61,6 +61,8 @@ export default async function handler(req, res) {
   const images = Array.isArray(req.body?.images) ? req.body.images.slice(0, 4) : [];
   const selectedMonth = String(req.body?.selectedMonth || "");
   const accountName = String(req.body?.accountName || "Conta bancária");
+  const statementCurrencyRaw = String(req.body?.statementCurrency || "CHF").toUpperCase();
+  const statementCurrency = ["CHF", "EUR", "USD"].includes(statementCurrencyRaw) ? statementCurrencyRaw : "CHF";
   const categories = Array.isArray(req.body?.categories) ? req.body.categories : [];
 
   const parsedImages = images.map(extractBase64Parts).filter(Boolean);
@@ -88,6 +90,7 @@ Formato obrigatório:
 Regras:
 - Conta alvo: ${accountName}.
 - Mês de contexto: ${selectedMonth || "não definido"}.
+- Moeda do extrato: ${statementCurrency}. Usa esta moeda como referência para os montantes lidos.
 - Se o extrato mostrar débitos, usa kind "expense" e amount positivo.
 - Se mostrar créditos/entradas, usa kind "income" e amount positivo.
 - Mantém a data real quando existir. Se faltar o ano, assume o ano do mês de contexto.
