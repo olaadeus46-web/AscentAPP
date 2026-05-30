@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import {
   G,
@@ -249,7 +249,7 @@ function PaginationControls({ page, pageCount, onPageChange, compact = false, to
           const prev = uniquePages[idx - 1];
           const showEllipsis = prev != null && value - prev > 1;
           return (
-            <React.Fragment key={value}>
+            <Fragment key={value}>
               {showEllipsis && <span style={{ color: T3, fontSize: 13, padding: "0 2px" }}>…</span>}
               <button
                 onClick={() => onPageChange(value)}
@@ -262,7 +262,7 @@ function PaginationControls({ page, pageCount, onPageChange, compact = false, to
                 }}>
                 {value}
               </button>
-            </React.Fragment>
+            </Fragment>
           );
         })}
         <button title="Página seguinte" aria-label="Página seguinte" onClick={() => onPageChange(page + 1)} disabled={page >= pageCount} style={{ ...bsm({ padding: "8px 12px" }), opacity: page >= pageCount ? 0.45 : 1 }}>→</button>
