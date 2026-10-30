@@ -101,25 +101,6 @@ function loadPersistedFinanceUiState() {
   }
 }
 
-function TabButton({ active, label, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        ...bsm({ padding: "8px 10px", fontSize: 12 }),
-        background: active ? G + "18" : "transparent",
-        color: active ? G : T3,
-        border: "1px solid " + (active ? G + "45" : "transparent"),
-        borderRadius: 10,
-        fontWeight: active ? 700 : 500,
-        whiteSpace: "nowrap",
-        width: "100%",
-      }}>
-      {label}
-    </button>
-  );
-}
-
 function SectionToggleButton({ active, label, onClick }) {
   return (
     <button
@@ -547,7 +528,6 @@ function TransactionCard({
   selectionMode = false,
   selected = false,
   onToggleSelect,
-  onAddToShared,
 }) {
   const color = category?.color || T2;
   const draftCategories = categories.filter((entry) => entry.kind === (draft?.kind || "expense"));
@@ -595,9 +575,6 @@ function TransactionCard({
           ) : (
             <>
               <button title="Editar" aria-label="Editar" onClick={onEdit} style={bsm({ color: BL, borderColor: BL + "30" })}>Editar</button>
-              {item.kind === "expense" && (
-                <button title="Conta conjunta" aria-label="Conta conjunta" onClick={onAddToShared} style={bsm({ color: G, borderColor: G + "40" })}>Partilhar</button>
-              )}
             </>
           )}
         </div>
@@ -782,15 +759,20 @@ function DeleteTransactionsConfirmModal({ isCompact, transactions, currencyLabel
   );
 }
 
-export default function FinancasSection({ portfolios, financeData, saveFinanceData, baseCurrency = "CHF", onUpdateBaseCurrency, fx = {}, onAddSharedExpenseFromMovement }) {
+export default function FinancasSection({ portfolios, financeData, saveFinanceData, baseCurrency = "CHF", onUpdateBaseCurrency, fx = {}, activeSection = "overview" }) {
   const persistedUiState = useMemo(() => loadPersistedFinanceUiState(), []);
   const normalizedFinanceData = useMemo(() => normalizeFinanceData(financeData || createDefaultFinanceData()), [financeData]);
   const [selectedMonth, setSelectedMonth] = useState(() => persistedUiState?.selectedMonth || currentMonthValue());
   const [selectedAccountId, setSelectedAccountId] = useState(() => persistedUiState?.selectedAccountId || "all");
-  const [activeTab, setActiveTab] = useState(() => {
-    const nextTab = persistedUiState?.activeTab;
-    return FINANCE_TABS.some((tab) => tab.key === nextTab) ? nextTab : "overview";
-  });
+  const [activeTab, setActiveTab] = useState(() => (
+    FINANCE_TABS.some((tab) => tab.key === activeSection) ? activeSection : "overview"
+  ));
+
+  useEffect(() => {
+    if (FINANCE_TABS.some((tab) => tab.key === activeSection)) {
+      setActiveTab(activeSection);
+    }
+  }, [activeSection]);
   const [isCompact, setIsCompact] = useState(false);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -844,13 +826,6 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
   });
   const fileInputRef = useRef(null);
   const convertFromChf = (value) => toBaseCurrency(value, baseCurrency, fx);
-  const mapTransactionToSharedExpense = (item) => ({
-    description: item.description,
-    amount: convertFromChf(item.amount),
-    currency: baseCurrency,
-    expenseDate: item.date,
-    note: item.notes || "",
-  });
 
   useEffect(() => {
     const checkCompact = () => setIsCompact(window.innerWidth <= 720);
@@ -994,9 +969,6 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
     const start = (currentTransactionsPage - 1) * transactionsPerPage;
     return filteredMonthTransactions.slice(start, start + transactionsPerPage);
   }, [filteredMonthTransactions, currentTransactionsPage, transactionsPerPage]);
-  const selectedExpenseTransactions = useMemo(() => (
-    monthTransactions.filter((item) => selectedTransactionIds.includes(item.id) && item.kind === "expense")
-  ), [monthTransactions, selectedTransactionIds]);
   const selectedTransactions = useMemo(() => (
     monthTransactions.filter((item) => selectedTransactionIds.includes(item.id))
   ), [monthTransactions, selectedTransactionIds]);
@@ -1237,16 +1209,6 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
     setSelectedTransactionIds([]);
   };
 
-  const shareSelectedTransactions = () => {
-    if (!selectedExpenseTransactions.length) return;
-    onAddSharedExpenseFromMovement?.({
-      movements: selectedExpenseTransactions.map(mapTransactionToSharedExpense),
-    });
-    setTransactionSelectionMode(false);
-    setSelectedTransactionIds([]);
-    setShowDeleteTransactionsConfirm(false);
-  };
-
   const addCategory = () => {
     const name = categoryForm.name.trim();
     if (!name) return;
@@ -1476,7 +1438,7 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
   return (
     <div style={{ paddingBottom: 40 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-        <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 22, color: T }}>Finanças</h2>
+        <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 22, color: T }}>{FINANCE_TABS.find((tab) => tab.key === activeTab)?.label || "Finanças"}</h2>
         <select
           value={baseCurrency}
           onChange={(e) => onUpdateBaseCurrency?.(e.target.value)}
@@ -1488,11 +1450,6 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
       </div>
 
       <div style={{ ...card({ padding: isCompact ? "12px" : "14px 16px", marginBottom: 20, overflow: "hidden" }) }}>
-        <div style={{ marginBottom: 10, background: S2, border: "1px solid " + BD, borderRadius: 12, padding: 4 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 4 }}>
-            {FINANCE_TABS.map((tab) => <TabButton key={tab.key} active={activeTab === tab.key} label={tab.label} onClick={() => setActiveTab(tab.key)} />)}
-          </div>
-        </div>
 
         <div style={{ display: "grid", gridTemplateColumns: isCompact ? "1fr" : "auto minmax(150px,170px) minmax(200px,240px)", gap: 8, alignItems: "center" }}>
           <div style={{ display: "grid", gridTemplateColumns: "34px minmax(0,1fr) 34px", gap: 6, alignItems: "center" }}>
@@ -1632,9 +1589,6 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
                     <button title="Cancelar seleção" aria-label="Cancelar seleção" style={{ ...bsm({ padding: "10px 12px", flex: isCompact ? 1 : "unset", color: T2, borderColor: BD2 }) }} onClick={cancelTransactionSelection}>
                       Cancelar
                     </button>
-                    <button title="Partilhar selecionados" aria-label="Partilhar selecionados" style={{ ...bsm({ padding: "10px 12px", flex: isCompact ? 1 : "unset", color: G, borderColor: G + "40", opacity: selectedExpenseTransactions.length ? 1 : 0.55 }) }} onClick={shareSelectedTransactions} disabled={!selectedExpenseTransactions.length}>
-                      Partilhar selecionados ({selectedExpenseTransactions.length})
-                    </button>
                     <button title="Duplicar selecionados" aria-label="Duplicar selecionados" style={{ ...bsm({ padding: "10px 12px", flex: isCompact ? 1 : "unset", color: BL, borderColor: BL + "30", opacity: selectedTransactions.length ? 1 : 0.55 }) }} onClick={duplicateSelectedTransactions} disabled={!selectedTransactions.length}>
                       Duplicar selecionados ({selectedTransactions.length})
                     </button>
@@ -1710,7 +1664,6 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
                     selectionMode={transactionSelectionMode}
                     selected={selectedTransactionIds.includes(item.id)}
                     onToggleSelect={() => toggleTransactionSelection(item.id)}
-                    onAddToShared={() => onAddSharedExpenseFromMovement?.(mapTransactionToSharedExpense(item))}
                   />
                 ))}
                 <PaginationControls page={currentTransactionsPage} pageCount={transactionPageCount} onPageChange={setTransactionsPage} compact totalItems={filteredMonthTransactions.length} />
@@ -1789,15 +1742,6 @@ export default function FinancasSection({ portfolios, financeData, saveFinanceDa
                               ) : (
                                 <>
                                   <button title="Editar" aria-label="Editar" onClick={() => startInlineEdit(item)} style={bsm({ color: BL, borderColor: BL + "30" })}>Editar</button>
-                                  {item.kind === "expense" && (
-                                    <button
-                                      title="Conta conjunta"
-                                      aria-label="Conta conjunta"
-                                      onClick={() => onAddSharedExpenseFromMovement?.(mapTransactionToSharedExpense(item))}
-                                      style={bsm({ color: G, borderColor: G + "40" })}>
-                                      Partilhar
-                                    </button>
-                                  )}
                                 </>
                               )}
                             </div>

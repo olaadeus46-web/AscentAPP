@@ -1,11 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Head from "next/head";
-import CalendarView from "../components/CalendarView";
 import HomeScreen from "../components/app/HomeScreen";
 import PatrimonioSection from "../components/app/PatrimonioSection";
 import IdeiasSection from "../components/app/IdeiasSection";
-import TricountSection from "../components/app/TricountSection";
-import ObjetivosSection from "../components/app/ObjetivosSection";
 import FinancasSection from "../components/app/FinancasSection";
 import {
   APP_FONT,
@@ -37,8 +34,6 @@ export default function App() {
   const [goals, setGoals] = useState([]);
   const [calendarSlots, setCalendarSlots] = useState([]);
   const [financeData, setFinanceData] = useState(null);
-  const [calendarSlotPrefill, setCalendarSlotPrefill] = useState(null);
-  const [tricountExpensePrefill, setTricountExpensePrefill] = useState(null);
   const [startDate, setStartDate] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [user, setUser] = useState(null);
@@ -181,74 +176,11 @@ export default function App() {
     persistUserData({ baseCurrency: value });
   }, [persistUserData]);
 
-  const addGoalSuggestionToCalendar = useCallback((goal, suggestion) => {
-    const now = new Date();
-    const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-    const startHour = Math.min(Math.max(now.getHours() + 1, 8), 22);
-    const endHour = Math.min(startHour + 1, 23);
-
-    const catMap = {
-      Financeiro: "finance",
-      Hábito: "health",
-      Aprendizagem: "learning",
-      Projeto: "work",
-      Outro: "other",
-    };
-
-    setSection("calendario");
-    setCalendarSlotPrefill({
-      requestId: Date.now() + Math.floor(Math.random() * 1000),
-      title: suggestion?.title || `Passo para objetivo: ${goal?.title || "Objetivo"}`,
-      category: catMap[goal?.category] || "other",
-      status: "todo",
-      date: todayIso,
-      startTime: `${String(startHour).padStart(2, "0")}:00`,
-      endTime: `${String(endHour).padStart(2, "0")}:00`,
-      notes: suggestion?.notes || `Tarefa criada a partir do objetivo "${goal?.title || "Objetivo"}"`,
-      recurring: "none",
-    });
-  }, []);
-
-  const consumeCalendarSlotPrefill = useCallback(() => {
-    setCalendarSlotPrefill(null);
-  }, []);
-
-  const openTricountExpenseFromMovement = useCallback((movementOrBatch) => {
-    const receivedMovements = Array.isArray(movementOrBatch)
-      ? movementOrBatch
-      : Array.isArray(movementOrBatch?.movements)
-        ? movementOrBatch.movements
-        : [movementOrBatch];
-
-    const movements = receivedMovements
-      .filter(Boolean)
-      .map((movement) => ({
-        description: movement?.description || "Despesa partilhada",
-        amount: Number(movement?.amount) || 0,
-        currency: movement?.currency || baseCurrency,
-        expenseDate: movement?.expenseDate || movement?.date || new Date().toISOString().slice(0, 10),
-        note: movement?.note || "",
-      }));
-
-    if (!movements.length) return;
-
-    setSection("tricount");
-    setTricountExpensePrefill({
-      requestId: Date.now() + Math.floor(Math.random() * 1000),
-      movements,
-    });
-  }, [baseCurrency]);
-
-  const consumeTricountExpensePrefill = useCallback(() => {
-    setTricountExpensePrefill(null);
-  }, []);
-
   const NAV = [
+    { key: "painel", label: "Painel", icon: "📊" },
+    { key: "movimentos", label: "Movimentos", icon: "💳" },
+    { key: "planeamento", label: "Planeamento", icon: "🗂️" },
     { key: "patrimonio", label: "Patrimônio", icon: "💰" },
-    { key: "financas", label: "Finanças", icon: "📊" },
-    { key: "tricount", label: "Partilhado", icon: "👥" },
-    { key: "objetivos", label: "Objetivos", icon: "🎯" },
-    { key: "calendario", label: "Calendário", icon: "📅" },
   ];
 
   useEffect(() => {
@@ -328,7 +260,7 @@ export default function App() {
 
           <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "calc(16px + 58px + env(safe-area-inset-top, 0px)) 14px 20px" : "28px 24px" }}>
             {section === "patrimonio" && <PatrimonioSection portfolios={portfolios} savePortfolios={savePortfolios} prices={prices} setPrices={setPrices} fx={fx} setFx={setFx} nwHistory={nwHistory} saveNwHistory={saveNwHistory} baseCurrency={baseCurrency} onUpdateBaseCurrency={updateBaseCurrency} financeData={financeData} />}
-            {section === "financas" && (
+            {(section === "painel" || section === "movimentos" || section === "planeamento") && (
               <FinancasSection
                 portfolios={portfolios}
                 financeData={financeData}
@@ -336,24 +268,15 @@ export default function App() {
                 baseCurrency={baseCurrency}
                 onUpdateBaseCurrency={updateBaseCurrency}
                 fx={fx}
-                onAddSharedExpenseFromMovement={openTricountExpenseFromMovement}
-              />
-            )}
-            {section === "tricount" && (
-              <TricountSection
-                prefillExpenseRequest={tricountExpensePrefill}
-                onConsumePrefillExpense={consumeTricountExpensePrefill}
-                currentUserId={user?.id}
+                activeSection={section === "painel" ? "overview" : section === "movimentos" ? "transactions" : "planning"}
               />
             )}
             {section === "ideias" && <IdeiasSection ideas={ideas} saveIdeas={saveIdeas} />}
-            {section === "objetivos" && <ObjetivosSection goals={goals} saveGoals={saveGoals} onAddCalendarTask={addGoalSuggestionToCalendar} />}
-            {section === "calendario" && <CalendarView slots={calendarSlots} onSaveSlots={saveCalendarSlots} newSlotPrefill={calendarSlotPrefill} onConsumeNewSlotPrefill={consumeCalendarSlotPrefill} />}
           </div>
 
           {isMobile && (
             <div style={{ position: "fixed", left: 10, right: 10, bottom: "calc(8px + env(safe-area-inset-bottom, 0px))", zIndex: 70, background: "rgba(12,17,32,.82)", border: "1px solid " + BD, borderRadius: 18, backdropFilter: "blur(14px)", boxShadow: "0 16px 34px rgba(4,8,22,.45)", padding: "6px" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 6 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6 }}>
                 {NAV.map((n) => (
                   <button title={n.label} aria-label={n.label} key={n.key} onClick={() => setSection(n.key)} style={{ ...bsm({ padding: "8px 6px", borderRadius: 12, border: "1px solid " + (section === n.key ? G + "50" : "transparent"), background: section === n.key ? G + "22" : "transparent", color: section === n.key ? G : T2, fontWeight: section === n.key ? 600 : 500 }), fontSize: 20, lineHeight: 1 }}>{n.icon}</button>
                 ))}
