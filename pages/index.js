@@ -23,7 +23,7 @@ import {
 } from "../components/app/shared";
 
 export default function App() {
-  const [section, setSection] = useState("patrimonio");
+  const [section, setSection] = useState("painel");
   const [isMobile, setIsMobile] = useState(false);
   const [baseCurrency, setBaseCurrency] = useState("CHF");
   const [portfolios, setPortfolios] = useState([]);
@@ -194,7 +194,7 @@ export default function App() {
     await fetch("/api/auth/logout", { method: "POST" });
     setUser(null);
     applyUserData({});
-    setSection("patrimonio");
+    setSection("painel");
   }, [applyUserData]);
 
   if (!loaded) {
